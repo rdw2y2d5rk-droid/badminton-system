@@ -1,0 +1,260 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Search,
+  Bell,
+  CheckCircle2,
+  ChevronDown,
+  UserCheck,
+  Shield,
+  Plus,
+  Calendar,
+  AlertTriangle,
+  Flame
+} from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+import { INITIAL_USERS } from '../../data/mockData';
+
+interface NavbarProps {
+  onOpenSearch: () => void;
+  onOpenAddStudent?: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }) => {
+  const {
+    currentUser,
+    switchUser,
+    notifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    navigate,
+    classes,
+    isCoach
+  } = useApp();
+
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setIsNotifOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <header className="hidden lg:flex sticky top-0 z-30 h-16 bg-white border-b border-slate-200 px-6 items-center justify-between transition-all">
+      {/* Left: Search Trigger */}
+      <div className="flex items-center gap-3 flex-1 max-w-lg">
+        <button
+          onClick={onOpenSearch}
+          className="flex items-center gap-2.5 w-full max-w-md px-4 py-2 bg-slate-100 hover:bg-slate-200/70 text-slate-500 rounded-full border-none text-sm transition-all shadow-xs group cursor-pointer"
+        >
+          <Search className="w-4 h-4 text-slate-400 group-hover:text-[#10B981] transition-colors" />
+          <span className="text-slate-400 font-normal">Tìm học viên, lớp học, HLV...</span>
+          <kbd className="hidden sm:inline-flex ml-auto text-[10px] uppercase font-semibold px-1.5 py-0.5 bg-white border border-slate-200 rounded-md text-slate-400">
+            Ctrl K
+          </kbd>
+        </button>
+      </div>
+
+      {/* Right Actions */}
+      <div className="flex items-center gap-3 sm:gap-4">
+        {/* Quick Attendance button */}
+        <button
+          onClick={() => navigate('attendance')}
+          className="hidden md:inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#10B981] font-semibold text-xs rounded-xl border border-emerald-200 transition-colors cursor-pointer"
+        >
+          <Flame className="w-3.5 h-3.5 fill-[#10B981] text-[#10B981]" />
+          <span>Điểm danh ngay</span>
+        </button>
+
+        {/* Add Student quick button (Admin only) */}
+        {!isCoach && onOpenAddStudent && (
+          <button
+            onClick={onOpenAddStudent}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0F172A] hover:bg-slate-800 text-white font-medium text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Thêm học viên</span>
+          </button>
+        )}
+
+        {/* Notifications Button & Dropdown */}
+        <div className="relative" ref={notifRef}>
+          <button
+            onClick={() => setIsNotifOpen(!isNotifOpen)}
+            className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+          >
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center shadow-xs">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* Notifications Dropdown */}
+          {isNotifOpen && (
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-[#0F172A]">Thông báo</span>
+                  {unreadCount > 0 && (
+                    <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-xs font-bold rounded-full">
+                      {unreadCount} mới
+                    </span>
+                  )}
+                </div>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllNotificationsAsRead}
+                    className="text-xs text-[#10B981] hover:text-emerald-700 font-semibold cursor-pointer"
+                  >
+                    Đọc tất cả
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-2">
+                {notifications.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-slate-400">Không có thông báo nào</p>
+                ) : (
+                  notifications.map(notif => (
+                    <div
+                      key={notif.id}
+                      onClick={() => {
+                        markNotificationAsRead(notif.id);
+                        if (notif.linkTo) {
+                          navigate(notif.linkTo.tab, notif.linkTo.id);
+                          setIsNotifOpen(false);
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl transition-colors cursor-pointer border flex items-start gap-3 ${
+                        notif.read
+                          ? 'bg-white hover:bg-slate-50 border-slate-100 text-slate-600'
+                          : 'bg-emerald-50/60 hover:bg-emerald-50 border-emerald-200/60 text-[#0F172A]'
+                      }`}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {notif.type === 'warning' && (
+                          <AlertTriangle className="w-4 h-4 text-amber-500" />
+                        )}
+                        {notif.type === 'info' && <Calendar className="w-4 h-4 text-sky-500" />}
+                        {notif.type === 'alert' && <AlertTriangle className="w-4 h-4 text-rose-500" />}
+                        {notif.type === 'success' && (
+                          <CheckCircle2 className="w-4 h-4 text-[#10B981]" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold leading-snug flex items-center justify-between">
+                          <span className="truncate">{notif.title}</span>
+                          <span className="text-[10px] text-slate-400 font-normal shrink-0 ml-1">
+                            {notif.time}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                          {notif.message}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Role Switcher & User Profile */}
+        <div className="relative" ref={userMenuRef}>
+          <button
+            onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+            className="flex items-center gap-3 p-1 sm:px-3 sm:py-1.5 rounded-2xl hover:bg-slate-50 transition-colors text-left cursor-pointer"
+          >
+            <div className="hidden lg:block text-right">
+              <div className="text-sm font-bold text-[#0F172A] leading-none">
+                {currentUser.name}
+              </div>
+              <span className="text-xs text-slate-400 font-medium">
+                {currentUser.role === 'ADMIN' ? 'Quản lý sân' : 'Huấn luyện viên'}
+              </span>
+            </div>
+            <div className="w-10 h-10 bg-[#A3E635] rounded-full flex items-center justify-center border-2 border-white shadow-xs font-bold text-[#0F172A] text-sm shrink-0">
+              {currentUser.role === 'ADMIN' ? 'AD' : 'CO'}
+            </div>
+          </button>
+
+          {/* Role switcher dropdown */}
+          {isUserMenuOpen && (
+            <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Chuyển đổi vai trò</div>
+                <div className="text-xs text-slate-600 mt-0.5">Góc nhìn Admin hoặc Huấn luyện viên</div>
+              </div>
+
+              <div className="space-y-1">
+                {INITIAL_USERS.map(user => {
+                  const isSelected = user.id === currentUser.id;
+                  return (
+                    <button
+                      key={user.id}
+                      onClick={() => {
+                        switchUser(user.id);
+                        setIsUserMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 p-2 rounded-xl text-left transition-colors cursor-pointer ${
+                        isSelected ? 'bg-emerald-50 text-emerald-950 font-semibold' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-[#A3E635] text-[#0F172A] font-bold text-xs flex items-center justify-center">
+                        {user.role === 'ADMIN' ? 'AD' : 'CO'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold truncate flex items-center justify-between">
+                          <span>{user.name}</span>
+                          {user.role === 'ADMIN' ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-900 text-white rounded">
+                              ADMIN
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">
+                              HLV
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate">{user.title}</div>
+                      </div>
+                      {isSelected && <CheckCircle2 className="w-4 h-4 text-[#10B981] shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2 pt-2 border-t border-slate-100 px-3 py-1 flex items-center justify-between text-[11px] text-slate-400">
+                <span>SmashZone Pro v2.4</span>
+                <button
+                  onClick={() => {
+                    navigate('settings');
+                    setIsUserMenuOpen(false);
+                  }}
+                  className="text-[#10B981] hover:underline font-semibold cursor-pointer"
+                >
+                  Cài đặt
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+};

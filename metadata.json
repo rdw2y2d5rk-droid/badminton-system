@@ -1,0 +1,6 @@
+{
+  "name": "Badminton Class Management System",
+  "description": "Hệ thống Quản lý Lớp Cầu Lông chuyên nghiệp với phân quyền Admin & HLV, điểm danh 30 giây, theo dõi số buổi và học phí",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
