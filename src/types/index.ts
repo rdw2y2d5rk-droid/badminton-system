@@ -67,8 +67,8 @@ export interface BadmintonClass {
   coachName: string;
   coachAvatar?: string;
   shiftId?: string;
-  scheduleDays: string[]; // e.g. ['T2', 'T4', 'T6']
-  scheduleDaysText: string; // "T2 · T4 · T6"
+  scheduleDays: string[]; // e.g. ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+  scheduleDaysText: string; // "T2 - CN"
   timeSlot: string; // "18:00 - 19:30"
   court: string; // "Sân 02"
   maxStudents: number;

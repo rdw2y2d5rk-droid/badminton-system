@@ -35,7 +35,7 @@ export const ClassesView: React.FC = () => {
   // New class form state
   const [newClassName, setNewClassName] = useState('');
   const [newClassCoachId, setNewClassCoachId] = useState('HLV001');
-  const [newClassScheduleDays, setNewClassScheduleDays] = useState(['T2', 'T4', 'T6']);
+  const [newClassScheduleDays, setNewClassScheduleDays] = useState(['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']);
   const [newClassTimeSlot, setNewClassTimeSlot] = useState('18:00 - 19:30');
   const [newClassCourt, setNewClassCourt] = useState(facilities[0]?.name || 'Sân Cầu Lông Cầu Giấy');
   const [newClassMaxStudents, setNewClassMaxStudents] = useState(14);
@@ -74,7 +74,7 @@ export const ClassesView: React.FC = () => {
       facilityId: targetFac?.id,
       facilityName: targetFac?.name,
       scheduleDays: newClassScheduleDays,
-      scheduleDaysText: newClassScheduleDays.join(' · '),
+      scheduleDaysText: 'T2 - CN',
       timeSlot: newClassTimeSlot,
       court: newClassCourt,
       maxStudents: Number(newClassMaxStudents),
@@ -376,6 +376,14 @@ export const ClassesView: React.FC = () => {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Lịch học trong tuần</label>
+              <div className="px-3.5 py-2 text-sm bg-emerald-50/60 border border-emerald-200/80 rounded-xl font-bold text-emerald-800 flex items-center justify-between">
+                <span>Thứ 2 — Chủ Nhật (T2 - CN)</span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Mở suốt tuần</span>
+              </div>
             </div>
 
             <div>

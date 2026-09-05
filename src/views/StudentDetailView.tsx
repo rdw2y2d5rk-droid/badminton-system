@@ -291,7 +291,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
                       </span>
                     ))
                   ) : (
-                    <span className="text-slate-400">Học các thứ 2, 4, 6 trong tháng</span>
+                    <span className="text-slate-400">Lịch học T2 - CN linh hoạt theo ngày</span>
                   )}
                 </div>
               </div>

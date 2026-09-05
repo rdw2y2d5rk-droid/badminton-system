@@ -85,7 +85,7 @@ export const StudentsView: React.FC = () => {
     );
   };
 
-  const applyQuickPreset = (preset: '246' | '357' | 'all_week' | 'clear' | 'all') => {
+  const applyQuickPreset = (preset: 'all' | 'weekdays' | 'weekend' | 'clear') => {
     const [year, month] = selectedCalMonth.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     const result: string[] = [];
@@ -100,13 +100,11 @@ export const StudentsView: React.FC = () => {
       const dayOfWeek = dObj.getDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      if (preset === '246' && [1, 3, 5].includes(dayOfWeek)) {
+      if (preset === 'all') {
         result.push(dateStr);
-      } else if (preset === '357' && [2, 4, 6].includes(dayOfWeek)) {
+      } else if (preset === 'weekdays' && dayOfWeek >= 1 && dayOfWeek <= 5) {
         result.push(dateStr);
-      } else if (preset === 'all_week' && dayOfWeek >= 1 && dayOfWeek <= 5) {
-        result.push(dateStr);
-      } else if (preset === 'all') {
+      } else if (preset === 'weekend' && (dayOfWeek === 0 || dayOfWeek === 6)) {
         result.push(dateStr);
       }
     }
@@ -680,8 +678,12 @@ export const StudentsView: React.FC = () => {
                   <strong className="text-slate-800">{student.facilityName || 'Cơ sở Cầu Giấy'} - {student.courtName || 'Sân 02'}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Lịch cố định:</span>
-                  <strong className="text-emerald-700">{student.fixedDays?.join(' · ') || 'T2 · T4 · T6'} ({student.fixedShiftName || '18:00 - 19:30'})</strong>
+                  <span className="text-slate-400">Lịch học:</span>
+                  <strong className="text-emerald-700">
+                    {student.specificDates && student.specificDates.length > 0
+                      ? `${student.specificDates.length} buổi linh hoạt`
+                      : (student.fixedDays?.join(' · ') || 'T2 - CN')} ({student.fixedShiftName || '18:00 - 19:30'})
+                  </strong>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Quỹ phép:</span>
@@ -832,34 +834,27 @@ export const StudentsView: React.FC = () => {
 
             {/* Quick Presets */}
             <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-emerald-100">
-              <span className="text-[11px] font-bold text-slate-500 mr-1">Gợi ý:</span>
-              <button
-                type="button"
-                onClick={() => applyQuickPreset('246')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Gợi ý T2-T4-T6
-              </button>
-              <button
-                type="button"
-                onClick={() => applyQuickPreset('357')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Gợi ý T3-T5-T7
-              </button>
-              <button
-                type="button"
-                onClick={() => applyQuickPreset('all_week')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Cả tuần (T2-T6)
-              </button>
+              <span className="text-[11px] font-bold text-slate-500 mr-1">Gợi ý nhanh:</span>
               <button
                 type="button"
                 onClick={() => applyQuickPreset('all')}
                 className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
               >
-                Tất cả ngày
+                ⚡ Cả tuần (T2 - CN)
+              </button>
+              <button
+                type="button"
+                onClick={() => applyQuickPreset('weekdays')}
+                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+              >
+                ⚡ Ngày thường (T2 - T6)
+              </button>
+              <button
+                type="button"
+                onClick={() => applyQuickPreset('weekend')}
+                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+              >
+                ⚡ Cuối tuần (T7 - CN)
               </button>
               <button
                 type="button"
@@ -1085,7 +1080,7 @@ export const StudentsView: React.FC = () => {
               rows={4}
               value={importText}
               onChange={e => handleParseContent(e.target.value)}
-              placeholder={`HoTen\tSoDienThoai\tEmail\tCoSo\tCaHoc\tThuTrongTuan\tSoBuoiHoc\nTrần Văn Bình\t0987111222\tbinh@gmail.com\tCơ sở 1 - Cầu Giấy\t18:00 - 19:30\tT2;T4;T6\t12`}
+              placeholder={`HoTen\tSoDienThoai\tEmail\tCoSo\tCaHoc\tThuTrongTuan\tSoBuoiHoc\nTrần Văn Bình\t0987111222\tbinh@gmail.com\tCơ sở 1 - Cầu Giấy\t18:00 - 19:30\tT2 - CN\t12`}
               className="w-full p-3 font-mono text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981]"
             />
           </div>
