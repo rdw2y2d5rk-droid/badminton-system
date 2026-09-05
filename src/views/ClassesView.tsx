@@ -24,7 +24,8 @@ export const ClassesView: React.FC = () => {
     isCoach,
     assignedClasses,
     setAttendanceTarget,
-    facilities
+    facilities,
+    shifts
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,12 +36,24 @@ export const ClassesView: React.FC = () => {
   // New class form state
   const [newClassName, setNewClassName] = useState('');
   const [newClassCoachId, setNewClassCoachId] = useState('HLV001');
+  const [newClassShiftId, setNewClassShiftId] = useState(shifts[0]?.id || 'CA04');
   const [newClassScheduleDays, setNewClassScheduleDays] = useState(['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']);
-  const [newClassTimeSlot, setNewClassTimeSlot] = useState('18:00 - 19:30');
   const [newClassCourt, setNewClassCourt] = useState(facilities[0]?.name || 'Sân Cầu Lông Cầu Giấy');
   const [newClassMaxStudents, setNewClassMaxStudents] = useState(14);
   const [newClassFee, setNewClassFee] = useState(1800000);
   const [newClassDesc, setNewClassDesc] = useState('');
+
+  const toggleScheduleDay = (day: string) => {
+    if (newClassScheduleDays.includes(day)) {
+      if (newClassScheduleDays.length > 1) {
+        setNewClassScheduleDays(newClassScheduleDays.filter(d => d !== day));
+      }
+    } else {
+      const order = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      const updated = [...newClassScheduleDays, day].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      setNewClassScheduleDays(updated);
+    }
+  };
 
   const displayClasses = isCoach ? assignedClasses : classes;
 
@@ -63,6 +76,9 @@ export const ClassesView: React.FC = () => {
 
     const coachObj = coaches.find(c => c.id === newClassCoachId);
     const targetFac = facilities.find(f => f.name === newClassCourt) || facilities[0];
+    const targetShift = shifts.find(s => s.id === newClassShiftId) || shifts[0];
+    const isAllWeek = newClassScheduleDays.length === 7;
+    const scheduleDaysText = isAllWeek ? 'T2 - CN' : newClassScheduleDays.join(' · ');
 
     addClass({
       name: newClassName,
@@ -73,9 +89,10 @@ export const ClassesView: React.FC = () => {
       coachAvatar: coachObj?.avatar,
       facilityId: targetFac?.id,
       facilityName: targetFac?.name,
+      shiftId: targetShift?.id,
       scheduleDays: newClassScheduleDays,
-      scheduleDaysText: 'T2 - CN',
-      timeSlot: newClassTimeSlot,
+      scheduleDaysText,
+      timeSlot: targetShift?.name || 'Ca Tối 1',
       court: newClassCourt,
       maxStudents: Number(newClassMaxStudents),
       status: 'Active',
@@ -379,25 +396,73 @@ export const ClassesView: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Lịch học trong tuần</label>
-              <div className="px-3.5 py-2 text-sm bg-emerald-50/60 border border-emerald-200/80 rounded-xl font-bold text-emerald-800 flex items-center justify-between">
-                <span>Thứ 2 — Chủ Nhật (T2 - CN)</span>
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Mở suốt tuần</span>
-              </div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Ca học *</label>
+              <select
+                value={newClassShiftId}
+                onChange={e => setNewClassShiftId(e.target.value)}
+                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
+              >
+                {shifts.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Khung giờ học *</label>
-              <select
-                value={newClassTimeSlot}
-                onChange={e => setNewClassTimeSlot(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
-              >
-                <option value="18:00 - 19:30">18:00 - 19:30 (Tối ca 1)</option>
-                <option value="19:30 - 21:00">19:30 - 21:00 (Tối ca 2)</option>
-                <option value="06:00 - 07:30">06:00 - 07:30 (Sáng sớm)</option>
-                <option value="08:00 - 10:00">08:00 - 10:00 (Cuối tuần)</option>
-              </select>
+            <div className="sm:col-span-2 p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-200/80 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <label className="block text-xs font-black text-emerald-950 uppercase tracking-wider">
+                  Lịch học trong tuần (Mở suốt tuần T2 — CN)
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setNewClassScheduleDays(['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'])}
+                    className="px-2 py-0.5 text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200 rounded-md hover:bg-emerald-100 cursor-pointer"
+                  >
+                    ⚡ Cả tuần (T2 - CN)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewClassScheduleDays(['T2', 'T3', 'T4', 'T5', 'T6'])}
+                    className="px-2 py-0.5 text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200 rounded-md hover:bg-emerald-100 cursor-pointer"
+                  >
+                    ⚡ Ngày thường (T2 - T6)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewClassScheduleDays(['T7', 'CN'])}
+                    className="px-2 py-0.5 text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200 rounded-md hover:bg-emerald-100 cursor-pointer"
+                  >
+                    ⚡ Cuối tuần (T7 - CN)
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-7 gap-1.5">
+                {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(day => {
+                  const active = newClassScheduleDays.includes(day);
+                  return (
+                    <button
+                      type="button"
+                      key={day}
+                      onClick={() => toggleScheduleDay(day)}
+                      className={`py-2 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
+                        active
+                          ? 'bg-[#10B981] text-white shadow-xs ring-1 ring-emerald-500'
+                          : 'bg-white text-slate-400 border border-slate-200 hover:border-emerald-300'
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-emerald-800 font-semibold">
+                {newClassScheduleDays.length === 7
+                  ? '✓ Đang chọn: Lớp mở liên tục cả 7 ngày trong tuần (T2 — CN)'
+                  : `Đang mở: ${newClassScheduleDays.join(' · ')}`}
+              </p>
             </div>
 
             <div>

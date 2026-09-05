@@ -709,7 +709,7 @@ export const StudentsView: React.FC = () => {
       <Modal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        title="Thêm Học Viên Mới & Đăng Ký Lịch Cố Định"
+        title="Thêm Học Viên Mới (Chọn Ngày Học Trong Tháng)"
       >
         <form onSubmit={handleCreateStudent} className="space-y-4 max-h-[75vh] overflow-y-auto no-scrollbar pr-1">
           <div className="grid grid-cols-2 gap-3">
