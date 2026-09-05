@@ -122,9 +122,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
                   <div className="font-bold text-sm text-white">{currentUser.name}</div>
                   <div className="text-xs text-[#10B981] font-medium">
                     {currentUser.role === 'ADMIN'
-                      ? 'Admin Center'
+                      ? 'Ban Quản Trị (Admin)'
                       : currentUser.role === 'FACILITY_MANAGER'
-                      ? (currentUser.facilityName || 'Quản lý cơ sở')
+                      ? (currentUser.facilityName || 'Quản lý sân')
                       : 'Huấn Luyện Viên'}
                   </div>
                 </div>
@@ -140,7 +140,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
             {/* Quick Role Switcher in Mobile Drawer */}
             <div className="my-4 p-3 bg-slate-900/80 rounded-2xl border border-slate-800">
               <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Chuyển vai trò xem
+                Vai trò hệ thống (Admin, Quản lý sân, HLV)
               </div>
               <div className="space-y-1.5">
                 {INITIAL_USERS.map(user => (

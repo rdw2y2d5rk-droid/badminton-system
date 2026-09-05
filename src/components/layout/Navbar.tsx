@@ -209,9 +209,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
               </div>
               <span className="text-xs text-slate-400 font-medium">
                 {currentUser.role === 'ADMIN'
-                  ? 'Quản trị hệ thống'
+                  ? 'Quản trị hệ thống (Admin)'
                   : currentUser.role === 'FACILITY_MANAGER'
-                  ? (currentUser.facilityName || 'Quản lý cơ sở')
+                  ? (currentUser.facilityName || 'Quản lý sân')
                   : 'Huấn luyện viên'}
               </span>
             </div>
@@ -222,10 +222,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
 
           {/* Role switcher dropdown */}
           {isUserMenuOpen && (
-            <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Chuyển đổi vai trò</div>
-                <div className="text-xs text-slate-600 mt-0.5">Admin, Quản lý cơ sở hoặc Huấn luyện viên</div>
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Phân quyền tài khoản</div>
+                <div className="text-xs text-slate-600 mt-0.5">Dành cho Admin, Quản lý sân & HLV (Không cấp quyền cho học viên)</div>
               </div>
 
               <div className="space-y-1">
