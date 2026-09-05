@@ -25,7 +25,8 @@ export const ClassesView: React.FC = () => {
     addClass,
     isCoach,
     assignedClasses,
-    setAttendanceTarget
+    setAttendanceTarget,
+    facilities
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,7 +41,7 @@ export const ClassesView: React.FC = () => {
   const [newClassCoachId, setNewClassCoachId] = useState('HLV001');
   const [newClassScheduleDays, setNewClassScheduleDays] = useState(['T2', 'T4', 'T6']);
   const [newClassTimeSlot, setNewClassTimeSlot] = useState('18:00 - 19:30');
-  const [newClassCourt, setNewClassCourt] = useState('Sân 02');
+  const [newClassCourt, setNewClassCourt] = useState(facilities[0]?.name || 'Sân Cầu Lông Cầu Giấy');
   const [newClassMaxStudents, setNewClassMaxStudents] = useState(14);
   const [newClassFee, setNewClassFee] = useState(1800000);
   const [newClassDesc, setNewClassDesc] = useState('');
@@ -66,6 +67,7 @@ export const ClassesView: React.FC = () => {
     if (!newClassName.trim()) return;
 
     const coachObj = coaches.find(c => c.id === newClassCoachId);
+    const targetFac = facilities.find(f => f.name === newClassCourt) || facilities[0];
     const levelLabelMap: Record<SkillLevel, string> = {
       Beginner: 'Cơ bản',
       Intermediate: 'Trung cấp',
@@ -79,6 +81,8 @@ export const ClassesView: React.FC = () => {
       coachId: newClassCoachId,
       coachName: coachObj ? coachObj.name : 'Nguyễn Minh Anh',
       coachAvatar: coachObj?.avatar,
+      facilityId: targetFac?.id,
+      facilityName: targetFac?.name,
       scheduleDays: newClassScheduleDays,
       scheduleDaysText: newClassScheduleDays.join(' · '),
       timeSlot: newClassTimeSlot,
@@ -400,17 +404,17 @@ export const ClassesView: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Sân tập *</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Sân cầu lông *</label>
               <select
                 value={newClassCourt}
                 onChange={e => setNewClassCourt(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
+                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
               >
-                <option value="Sân 01">Sân 01 (VIP)</option>
-                <option value="Sân 02">Sân 02</option>
-                <option value="Sân 03">Sân 03</option>
-                <option value="Sân 04">Sân 04</option>
-                <option value="Sân 05">Sân 05</option>
+                {facilities.map(f => (
+                  <option key={f.id} value={f.name}>
+                    {f.name}
+                  </option>
+                ))}
               </select>
             </div>
 

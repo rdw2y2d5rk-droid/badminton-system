@@ -15,35 +15,32 @@ export interface UserProfile {
 
 export type SkillLevel = 'Beginner' | 'Intermediate' | 'Advanced';
 
-// Cơ sở cầu lông (Branch / Facility)
+// Sân cầu lông (Facility / Badminton Court) - Thống nhất Cơ sở & Sân là một
 export interface Facility {
-  id: string; // e.g. "CS01"
-  code: string; // "CS01"
-  name: string; // "Cơ sở Cầu Giấy"
+  id: string; // e.g. "SAN01" hoặc "CS01"
+  code: string; // "SAN-CG"
+  name: string; // "Sân Cầu Lông Cầu Giấy"
   address: string; // "Số 12 Dịch Vọng Hậu, Cầu Giấy, Hà Nội"
   phone: string;
   managerId?: string;
   managerName?: string;
-  totalCourts: number;
   openHours: string; // "06:00 - 22:30"
   status: 'Active' | 'Maintenance' | 'Inactive';
   description?: string;
+  pricePerHour?: number;
+  surface?: string;
+  totalCourts?: number;
   courtIds?: string[];
+  facilityId?: string;
+  facilityName?: string;
+  type?: 'Standard' | 'VIP';
+  currentCoach?: string;
+  currentClass?: string;
 }
 
-// Sân cầu lông trực thuộc cơ sở
-export interface CourtInfo {
-  id: string; // "SAN01"
-  facilityId: string; // "CS01"
-  facilityName: string; // "Cơ sở Cầu Giấy"
-  name: string; // "Sân 01"
-  type: 'Standard' | 'VIP';
-  surface: string; // "Thảm PVC Yonex 5.0mm"
-  status: 'InUse' | 'Available' | 'Maintenance';
-  pricePerHour?: number;
-  currentClass?: string;
-  currentCoach?: string;
-}
+// Alias để tương thích ngược toàn bộ hệ thống
+export type CourtInfo = Facility;
+export type BadmintonCourt = Facility;
 
 // Ca học (Shift / Time Slot)
 export interface ShiftInfo {
@@ -114,27 +111,38 @@ export interface Student {
   coachId: string;
   coachName: string;
 
-  // Lịch cố định theo cơ sở, ca và các thứ trong tuần
-  facilityId?: string; // e.g. "CS01"
-  facilityName?: string; // "Cơ sở 1 - Cầu Giấy"
-  courtId?: string; // "SAN02"
-  courtName?: string; // "Sân 02"
-  fixedShiftId?: string; // "CA04"
-  fixedShiftName?: string; // "18:00 - 19:30"
-  fixedDays?: string[]; // e.g. ['T2', 'T4', 'T6']
+  // Lịch học theo ngày cụ thể trong tháng (không cố định thứ nữa)
+  specificDates?: string[]; // e.g. ['2026-08-03', '2026-08-05', '2026-08-10', ...]
+  scheduleStatus?: 'pending_admin' | 'confirmed'; // Trạng thái phê duyệt / lưu lịch của Admin
+  scheduleConfirmedAt?: string;
+  scheduleConfirmedBy?: string;
+
+  // Lịch cố định theo sân, ca
+  facilityId?: string; // e.g. "SAN01" hoặc "CS01"
+  facilityName?: string; // "Sân Cầu Lông Cầu Giấy"
+  courtId?: string;
+  courtName?: string;
+  fixedShiftId?: string;
+  fixedShiftName?: string;
+  shiftId?: string;
+  shiftName?: string;
+  timeSlot?: string;
+  fixedDays?: string[];
+  fixedWeekdays?: string[];
 
   // Đăng ký theo tháng & thời hạn
-  month?: string; // "Tháng 09/2026"
-  startDate?: string; // "2026-09-01"
-  endDate?: string; // "2026-09-30"
+  month?: string; // "Tháng 08/2026"
+  startDate?: string;
+  endDate?: string;
 
   // Quản lý gói buổi & Quy luật tính phép (4 buổi = 1 phép)
-  packageSessions: number; // e.g. 12 buổi
-  attendedSessions: number; // e.g. 8 buổi
-  remainingSessions: number; // e.g. 4 buổi
-  allowedLeaves?: number; // Math.floor(packageSessions / 4) e.g. 3 phép
-  usedLeaves?: number; // e.g. 1 phép đã dùng
-  carriedOverSessions?: number; // Buổi còn lại được cộng dồn từ tháng trước
+  packageSessions: number;
+  attendedSessions: number;
+  remainingSessions: number;
+  allowedLeaves?: number;
+  maxLeaveDays?: number;
+  usedLeaves?: number;
+  carriedOverSessions?: number;
 
   paymentStatus: PaymentStatus;
   status: StudentStatus;
@@ -247,3 +255,22 @@ export interface NotificationItem {
     id?: string;
   };
 }
+
+// Thông báo Admin duyệt lịch học & vận hành
+export interface AdminNotification {
+  id: string;
+  type: 'new_schedule_request' | 'late_coach' | 'student_leave';
+  title: string;
+  message: string;
+  studentId?: string;
+  studentName?: string;
+  studentPhone?: string;
+  facilityId: string;
+  facilityName: string;
+  shiftId: string;
+  shiftName: string;
+  specificDates?: string[];
+  status: 'unread' | 'read' | 'confirmed';
+  createdAt: string;
+}
+

@@ -276,9 +276,9 @@ export const AttendanceView: React.FC = () => {
 
           <div className="sm:col-span-2 lg:col-span-1 bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-col justify-center">
             <div className="text-xs text-slate-500 flex items-center justify-between">
-              <span>Cơ sở & Sân:</span>
+              <span>Sân cầu lông:</span>
               <strong className="text-[#0F172A]">
-                {targetSession?.facilityName || 'Cơ sở 1 - Cầu Giấy'} • {selectedClass?.court}
+                {targetSession?.facilityName || selectedClass?.facilityName || 'Sân Cầu Lông Cầu Giấy'}
               </strong>
             </div>
             <div className="text-xs text-slate-500 flex items-center justify-between mt-1">

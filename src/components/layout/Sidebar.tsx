@@ -26,7 +26,8 @@ export const Sidebar: React.FC = () => {
     payments,
     isCoach,
     currentUser,
-    assignedSessions
+    assignedSessions,
+    pendingScheduleCount
   } = useApp();
 
   // Badges calculation
@@ -54,7 +55,7 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: 'facilities',
-      label: 'Cơ sở & Sân',
+      label: 'Sân cầu lông',
       icon: MapPin,
       roles: ['ADMIN', 'FACILITY_MANAGER'],
       badge: null
@@ -96,7 +97,11 @@ export const Sidebar: React.FC = () => {
       label: 'Lịch học',
       icon: Calendar,
       roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
-      badge: null
+      badge: pendingScheduleCount > 0 ? (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
+          {pendingScheduleCount}
+        </span>
+      ) : null
     },
     {
       id: 'attendance',

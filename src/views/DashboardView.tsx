@@ -28,7 +28,9 @@ export const DashboardView: React.FC = () => {
     coaches,
     sessions,
     navigate,
-    setAttendanceTarget
+    setAttendanceTarget,
+    facilities,
+    pendingScheduleCount
   } = useApp();
 
   // Admin KPIs
@@ -460,40 +462,43 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
 
-          {/* Sân Đang Hoạt Động (Courts Grid) */}
+          {/* Sân Cầu Lông Trực Thuộc (Courts Grid) */}
           <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="font-bold text-base text-[#0F172A]">Tình trạng sân trực tiếp</h3>
-                <p className="text-xs text-slate-400">Trạng thái 5 sân thi đấu và tập luyện</p>
+                <h3 className="font-bold text-base text-[#0F172A]">Tình trạng sân cầu lông</h3>
+                <p className="text-xs text-slate-400">Các cơ sở & sân tập trực thuộc hệ thống</p>
               </div>
-              <span className="text-xs text-[#10B981] font-bold flex items-center gap-1.5 bg-emerald-50 px-3 py-1 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse"></span>
-                5 sân sẵn sàng
-              </span>
+              <button
+                onClick={() => navigate('facilities')}
+                className="text-xs text-[#10B981] font-bold hover:underline flex items-center gap-1.5 cursor-pointer"
+              >
+                Quản lý sân →
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {[
-                { name: 'Sân 01', class: 'Advanced 01', coach: 'Lê Hoàng Nam', active: true },
-                { name: 'Sân 02', class: 'Beginner 01', coach: 'Nguyễn Minh Anh', active: true },
-                { name: 'Sân 03', class: 'Intermediate 02', coach: 'Trần Quốc Huy', active: true },
-                { name: 'Sân 04', class: 'Beginner 02', coach: 'Phạm Đức Long', active: false },
-                { name: 'Sân 05', class: 'Trống / Tự do', coach: '—', active: false }
-              ].map((court, idx) => (
-                <div
-                  key={idx}
-                  className={`p-3.5 rounded-2xl border text-center transition-all ${
-                    court.active
-                      ? 'bg-emerald-50/80 border-emerald-200 text-[#0F172A]'
-                      : 'bg-slate-50 border-slate-100 text-slate-600'
-                  }`}
-                >
-                  <div className="text-xs font-bold">{court.name}</div>
-                  <div className="text-[11px] font-bold mt-1 text-[#10B981] truncate">{court.class}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5 truncate">{court.coach}</div>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {facilities.map((court) => {
+                const courtClasses = classes.filter(c => c.facilityId === court.id || c.court === court.name);
+                return (
+                  <div
+                    key={court.id}
+                    onClick={() => navigate('facilities')}
+                    className="p-3.5 rounded-2xl border bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 border-slate-100 text-slate-700 transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-bold text-[#0F172A] truncate">{court.name}</div>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    </div>
+                    <div className="text-[11px] font-bold mt-1 text-[#10B981] truncate">
+                      {courtClasses.length} lớp học tại sân
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                      QL: {court.managerName || 'Nguyễn Văn Thắng'}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -508,6 +513,20 @@ export const DashboardView: React.FC = () => {
             </div>
 
             <div className="space-y-3">
+              {pendingScheduleCount > 0 && (
+                <div
+                  onClick={() => navigate('schedule')}
+                  className="flex items-center gap-3 p-3.5 bg-amber-50 hover:bg-amber-100/70 rounded-2xl border border-amber-200 cursor-pointer transition-colors animate-pulse"
+                >
+                  <div className="w-10 h-10 bg-amber-200 text-amber-900 rounded-xl flex items-center justify-center font-bold shrink-0">
+                    {pendingScheduleCount}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-amber-950">Chờ Admin lưu lịch học!</div>
+                    <div className="text-[11px] text-amber-700">Học viên đăng ký ngày cụ thể trong tháng</div>
+                  </div>
+                </div>
+              )}
               <div
                 onClick={() => navigate('payments')}
                 className="flex items-center gap-3 p-3.5 bg-red-50 hover:bg-red-100/70 rounded-2xl border border-red-100 cursor-pointer transition-colors"

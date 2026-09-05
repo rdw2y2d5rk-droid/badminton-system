@@ -28,7 +28,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
     markAllNotificationsAsRead,
     navigate,
     classes,
-    isCoach
+    isCoach,
+    pendingScheduleCount,
+    adminNotifications
   } = useApp();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -36,7 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const totalUnreadCount = notifications.filter(n => !n.read).length + (!isCoach ? pendingScheduleCount : 0);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -96,9 +98,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
             className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
           >
             <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
+            {totalUnreadCount > 0 && (
               <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center shadow-xs">
-                {unreadCount}
+                {totalUnreadCount}
               </span>
             )}
           </button>
@@ -109,13 +111,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
               <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-sm text-[#0F172A]">Thông báo</span>
-                  {unreadCount > 0 && (
+                  {totalUnreadCount > 0 && (
                     <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-xs font-bold rounded-full">
-                      {unreadCount} mới
+                      {totalUnreadCount} mới
                     </span>
                   )}
                 </div>
-                {unreadCount > 0 && (
+                {notifications.filter(n => !n.read).length > 0 && (
                   <button
                     onClick={markAllNotificationsAsRead}
                     className="text-xs text-[#10B981] hover:text-emerald-700 font-semibold cursor-pointer"
@@ -124,6 +126,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
                   </button>
                 )}
               </div>
+
+              {/* Pending Schedule Alert for Admin */}
+              {!isCoach && pendingScheduleCount > 0 && (
+                <div
+                  onClick={() => {
+                    navigate('schedule');
+                    setIsNotifOpen(false);
+                  }}
+                  className="mb-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 cursor-pointer hover:bg-amber-100/70 transition-colors flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                    <span className="text-xs font-bold text-amber-900">
+                      {pendingScheduleCount} học viên cần Admin lưu lịch!
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-bold text-amber-800 underline">
+                    Xem & Duyệt →
+                  </span>
+                </div>
+              )}
 
               <div className="max-h-72 overflow-y-auto space-y-2">
                 {notifications.length === 0 ? (

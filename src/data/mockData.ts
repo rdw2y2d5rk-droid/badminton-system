@@ -1,4 +1,5 @@
 import {
+  AdminNotification,
   BadmintonClass,
   Coach,
   CourtInfo,
@@ -14,31 +15,48 @@ import {
 export const INITIAL_FACILITIES: Facility[] = [
   {
     id: 'CS01',
-    code: 'CS01',
-    name: 'Cơ sở 1 - Cầu Giấy',
+    code: 'SAN-CG',
+    name: 'Sân Cầu Lông Cầu Giấy',
     address: 'Số 12 Dịch Vọng Hậu, Quận Cầu Giấy, Hà Nội',
     phone: '0988 123 456',
     managerId: 'user_manager_1',
     managerName: 'Hoàng Văn Long',
-    totalCourts: 3,
+    totalCourts: 1,
     openHours: '06:00 - 22:30',
     status: 'Active',
-    description: 'Trung tâm huấn luyện tiêu chuẩn 3 sân thảm Yonex/Li-Ning đạt chuẩn BWF.',
-    courtIds: ['SAN01', 'SAN02', 'SAN03']
+    surface: 'Thảm PVC Yonex 5.0mm BWF',
+    pricePerHour: 150000,
+    description: 'Sân thảm Yonex chuyên nghiệp đạt chuẩn thi đấu BWF, hệ thống đèn chống chói & điều hoà mát.'
   },
   {
     id: 'CS02',
-    code: 'CS02',
-    name: 'Cơ sở 2 - Ba Đình',
+    code: 'SAN-BD',
+    name: 'Sân Cầu Lông Ba Đình',
     address: 'Số 45 Liễu Giai, Quận Ba Đình, Hà Nội',
     phone: '0977 654 321',
     managerId: 'user_manager_2',
     managerName: 'Vũ Đức Thịnh',
-    totalCourts: 2,
+    totalCourts: 1,
     openHours: '06:00 - 22:00',
     status: 'Active',
-    description: 'Cơ sở đào tạo chuyên sâu phong trào và thiếu nhi khu vực Ba Đình.',
-    courtIds: ['SAN04', 'SAN05']
+    surface: 'Thảm PVC Li-Ning 4.5mm',
+    pricePerHour: 140000,
+    description: 'Sân đào tạo chuyên sâu phong trào và thiếu nhi khu vực Ba Đình, bãi đỗ xe ô tô rộng rãi.'
+  },
+  {
+    id: 'CS03',
+    code: 'SAN-TX',
+    name: 'Sân Cầu Lông Thanh Xuân',
+    address: 'Số 166 Khuất Duy Tiến, Quận Thanh Xuân, Hà Nội',
+    phone: '0912 345 678',
+    managerId: 'user_manager_3',
+    managerName: 'Nguyễn Văn Hùng',
+    totalCourts: 1,
+    openHours: '05:30 - 23:00',
+    status: 'Active',
+    surface: 'Thảm PVC Enlio 5.0mm',
+    pricePerHour: 160000,
+    description: 'Sân cầu lông cao cấp khu vực Thanh Xuân, giao thông thuận tiện gần vành đai 3.'
   }
 ];
 
@@ -65,11 +83,11 @@ export const INITIAL_USERS: UserProfile[] = [
     name: 'Hoàng Văn Long',
     role: 'FACILITY_MANAGER',
     facilityId: 'CS01',
-    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    facilityName: 'Sân Cầu Lông Cầu Giấy',
     email: 'vanlong.manager@smashzone.vn',
     phone: '0988 555 666',
     avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80',
-    title: 'Quản lý Cơ sở Cầu Giấy'
+    title: 'Quản lý Sân Cầu Giấy'
   },
   {
     id: 'user_coach_1',
@@ -682,13 +700,8 @@ export const INITIAL_STUDENTS: Student[] = [
   }
 ];
 
-export const INITIAL_COURTS: CourtInfo[] = [
-  { id: 'SAN01', facilityId: 'CS01', facilityName: 'Cơ sở 1 - Cầu Giấy', name: 'Sân 01', type: 'VIP', surface: 'Thảm PVC Yonex 5.0mm', status: 'InUse', pricePerHour: 180000, currentClass: 'Advanced 01', currentCoach: 'Lê Hoàng Nam' },
-  { id: 'SAN02', facilityId: 'CS01', facilityName: 'Cơ sở 1 - Cầu Giấy', name: 'Sân 02', type: 'Standard', surface: 'Thảm PVC Li-Ning 4.5mm', status: 'InUse', pricePerHour: 150000, currentClass: 'Beginner 01', currentCoach: 'Nguyễn Minh Anh' },
-  { id: 'SAN03', facilityId: 'CS01', facilityName: 'Cơ sở 1 - Cầu Giấy', name: 'Sân 03', type: 'Standard', surface: 'Thảm PVC Li-Ning 4.5mm', status: 'InUse', pricePerHour: 150000, currentClass: 'Intermediate 02', currentCoach: 'Trần Quốc Huy' },
-  { id: 'SAN04', facilityId: 'CS02', facilityName: 'Cơ sở 2 - Ba Đình', name: 'Sân 04', type: 'Standard', surface: 'Thảm PVC Victor 4.5mm', status: 'Available', pricePerHour: 150000 },
-  { id: 'SAN05', facilityId: 'CS02', facilityName: 'Cơ sở 2 - Ba Đình', name: 'Sân 05', type: 'Standard', surface: 'Thảm PVC Victor 4.5mm', status: 'Available', pricePerHour: 150000 },
-];
+// Thống nhất Sân Cầu Lông: INITIAL_COURTS chính là INITIAL_FACILITIES
+export const INITIAL_COURTS: CourtInfo[] = INITIAL_FACILITIES;
 
 export const INITIAL_TODAY_SESSIONS: SessionSchedule[] = [
   {
@@ -1055,7 +1068,7 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
     id: 'NOTIF-02',
     title: 'Nhắc nhở điểm danh buổi tối',
-    message: 'Lớp Beginner 01 sắp bắt đầu lúc 18:00 tại Sân 02 (HLV Nguyễn Minh Anh).',
+    message: 'Lớp Beginner 01 sắp bắt đầu lúc 18:00 tại Sân Cầu Giấy (HLV Nguyễn Minh Anh).',
     time: '25 phút trước',
     read: false,
     type: 'info',
@@ -1080,3 +1093,39 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     linkTo: { tab: 'attendance' }
   }
 ];
+
+export const INITIAL_ADMIN_NOTIFICATIONS: AdminNotification[] = [
+  {
+    id: 'REQ-01',
+    type: 'new_schedule_request',
+    title: 'Yêu cầu lưu lịch học mới',
+    message: 'Học viên Trần Quốc Đạt đăng ký 8 ngày học cụ thể trong Tháng 08/2026 tại Sân Cầu Lông Cầu Giấy (Ca Tối 1)',
+    studentId: 'HV011',
+    studentName: 'Trần Quốc Đạt',
+    studentPhone: '0911 223 344',
+    facilityId: 'CS01',
+    facilityName: 'Sân Cầu Lông Cầu Giấy',
+    shiftId: 'CA04',
+    shiftName: 'Ca Tối 1 (18:00 - 19:30)',
+    specificDates: ['2026-08-03', '2026-08-07', '2026-08-10', '2026-08-14', '2026-08-17', '2026-08-21', '2026-08-24', '2026-08-28'],
+    status: 'unread',
+    createdAt: '28/08/2026 14:20'
+  },
+  {
+    id: 'REQ-02',
+    type: 'new_schedule_request',
+    title: 'Yêu cầu lưu lịch học mới',
+    message: 'Học viên Lê Thị Thuỷ đăng ký 6 ngày học linh hoạt trong Tháng 08/2026 tại Sân Cầu Lông Ba Đình (Ca Sáng 1)',
+    studentId: 'HV012',
+    studentName: 'Lê Thị Thuỷ',
+    studentPhone: '0977 888 999',
+    facilityId: 'CS02',
+    facilityName: 'Sân Cầu Lông Ba Đình',
+    shiftId: 'CA01',
+    shiftName: 'Ca Sáng 1 (06:00 - 07:30)',
+    specificDates: ['2026-08-04', '2026-08-08', '2026-08-11', '2026-08-15', '2026-08-18', '2026-08-22'],
+    status: 'unread',
+    createdAt: '28/08/2026 16:05'
+  }
+];
+

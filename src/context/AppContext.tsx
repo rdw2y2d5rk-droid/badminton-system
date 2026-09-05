@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import {
+  INITIAL_ADMIN_NOTIFICATIONS,
   INITIAL_ALL_SESSIONS,
   INITIAL_CLASSES,
   INITIAL_COACHES,
@@ -13,6 +14,7 @@ import {
   INITIAL_USERS
 } from '../data/mockData';
 import {
+  AdminNotification,
   AttendanceRecordItem,
   BadmintonClass,
   Coach,
@@ -120,6 +122,12 @@ interface AppContextType {
   // Notifications
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
+
+  // Admin Schedule Notifications & Approvals
+  adminNotifications: AdminNotification[];
+  confirmStudentSchedule: (studentId: string, customDates?: string[]) => void;
+  rejectStudentSchedule: (studentId: string) => void;
+  pendingScheduleCount: number;
   
   // Search
   searchQuery: string;
@@ -152,14 +160,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   
   const [facilities, setFacilities] = useState<Facility[]>(INITIAL_FACILITIES);
-  const [courts, setCourts] = useState<CourtInfo[]>(INITIAL_COURTS);
+  const [courts, setCourts] = useState<CourtInfo[]>(INITIAL_FACILITIES);
   const [shifts, setShifts] = useState<ShiftInfo[]>(INITIAL_SHIFTS);
   const [classes, setClasses] = useState<BadmintonClass[]>(INITIAL_CLASSES);
-  const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
+  const [students, setStudents] = useState<Student[]>(() => {
+    return INITIAL_STUDENTS.map((s, idx) => {
+      const isPending = s.id === 'HV011' || s.id === 'HV012';
+      const sampleDates = isPending
+        ? (idx % 2 === 0
+          ? ['2026-08-03', '2026-08-07', '2026-08-10', '2026-08-14', '2026-08-17', '2026-08-21', '2026-08-24', '2026-08-28']
+          : ['2026-08-04', '2026-08-08', '2026-08-11', '2026-08-15', '2026-08-18', '2026-08-22'])
+        : ['2026-08-03', '2026-08-05', '2026-08-07', '2026-08-10', '2026-08-12', '2026-08-14', '2026-08-17', '2026-08-19', '2026-08-21', '2026-08-24', '2026-08-26', '2026-08-28'];
+
+      return {
+        ...s,
+        facilityId: s.facilityId || (idx % 2 === 0 ? 'CS01' : 'CS02'),
+        facilityName: s.facilityName || (idx % 2 === 0 ? 'Sân Cầu Lông Cầu Giấy' : 'Sân Cầu Lông Ba Đình'),
+        courtName: s.courtName || s.facilityName || (idx % 2 === 0 ? 'Sân Cầu Lông Cầu Giấy' : 'Sân Cầu Lông Ba Đình'),
+        fixedShiftId: s.fixedShiftId || 'CA04',
+        fixedShiftName: s.fixedShiftName || 'Ca Tối 1 (18:00 - 19:30)',
+        shiftId: s.shiftId || 'CA04',
+        shiftName: s.shiftName || 'Ca Tối 1',
+        timeSlot: s.timeSlot || '18:00 - 19:30',
+        specificDates: s.specificDates || sampleDates,
+        scheduleStatus: s.scheduleStatus || (isPending ? 'pending_admin' : 'confirmed'),
+        month: s.month || 'Tháng 08/2026'
+      };
+    });
+  });
   const [coaches, setCoaches] = useState<Coach[]>(INITIAL_COACHES);
   const [sessions, setSessions] = useState<SessionSchedule[]>(INITIAL_ALL_SESSIONS);
   const [payments, setPayments] = useState<PaymentItem[]>(INITIAL_PAYMENTS);
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [adminNotifications, setAdminNotifications] = useState<AdminNotification[]>(INITIAL_ADMIN_NOTIFICATIONS);
   
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -625,23 +658,136 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Thu tiền tại cơ sở thành công: ${data.amount.toLocaleString('vi-VN')}đ (${newPayment.code})`, 'success');
   };
 
+  // Helper: auto-create SessionSchedule entries for specific dates
+  const createSessionsForDates = (student: Student, dates: string[]) => {
+    setSessions(prev => {
+      const updated = [...prev];
+      dates.forEach(d => {
+        const targetShiftId = student.fixedShiftId || student.shiftId || 'CA04';
+        const exists = updated.find(s => s.date === d && (s.classId === student.classId || (s.facilityId === student.facilityId && s.shiftId === targetShiftId)));
+        if (exists) {
+          if (!exists.attendanceRecords?.some(r => r.studentId === student.id)) {
+            exists.totalStudents = (exists.totalStudents || 0) + 1;
+          }
+        } else {
+          const dObj = new Date(d);
+          const dayIndex = isNaN(dObj.getDay()) ? 1 : dObj.getDay();
+          const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+          const dayOfWeek = dayNames[dayIndex] || 'Thứ Hai';
+
+          updated.push({
+            id: `SES-${d.replace(/-/g, '')}-${student.classId || 'CLS'}`,
+            classId: student.classId || 'BD-B01',
+            className: student.className || 'Lớp Cầu Lông',
+            level: student.skillLevel || 'Beginner',
+            facilityId: student.facilityId || 'CS01',
+            facilityName: student.facilityName || 'Sân Cầu Lông Cầu Giấy',
+            court: student.facilityName || 'Sân Cầu Lông Cầu Giấy',
+            shiftId: targetShiftId,
+            coachId: student.coachId || 'HLV001',
+            coachName: student.coachName || 'Nguyễn Minh Anh',
+            date: d,
+            dayOfWeek,
+            startTime: student.timeSlot?.split(' - ')[0] || '18:00',
+            endTime: student.timeSlot?.split(' - ')[1] || '19:30',
+            timeSlot: student.timeSlot || '18:00 - 19:30',
+            status: 'Upcoming',
+            attendanceDone: false,
+            totalStudents: 1,
+            attendanceRecords: []
+          });
+        }
+      });
+      return updated;
+    });
+  };
+
+  // Admin Schedule Approvals
+  const confirmStudentSchedule = (studentId: string, customDates?: string[]) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    const finalDates = customDates || student.specificDates || [];
+    const newPackageSessions = finalDates.length > 0 ? finalDates.length : student.packageSessions;
+    const newAllowedLeaves = Math.floor(newPackageSessions / 4);
+
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id === studentId) {
+          return {
+            ...s,
+            specificDates: finalDates,
+            packageSessions: newPackageSessions,
+            remainingSessions: newPackageSessions,
+            allowedLeaves: newAllowedLeaves,
+            scheduleStatus: 'confirmed',
+            scheduleConfirmedAt: new Date().toISOString(),
+            scheduleConfirmedBy: currentUser.name
+          };
+        }
+        return s;
+      })
+    );
+
+    if (finalDates.length > 0) {
+      createSessionsForDates(student, finalDates);
+    }
+
+    setAdminNotifications(prev =>
+      prev.map(n => (n.studentId === studentId ? { ...n, status: 'confirmed' } : n))
+    );
+
+    try {
+      confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
+    } catch {
+      // ignore
+    }
+
+    showToast(`✅ Admin đã duyệt và lưu lịch học cho học viên ${student.name} (${finalDates.length} buổi)!`, 'success');
+  };
+
+  const rejectStudentSchedule = (studentId: string) => {
+    setAdminNotifications(prev => prev.filter(n => n.studentId !== studentId));
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id === studentId) {
+          return {
+            ...s,
+            scheduleStatus: 'pending_admin'
+          };
+        }
+        return s;
+      })
+    );
+    showToast('Đã huỷ yêu cầu lưu lịch học.', 'info');
+  };
+
   // Student Actions
   const addStudent = (studentData: Omit<Student, 'id' | 'code'>) => {
     const nextNum = students.length + 1;
     const newId = `HV${String(nextNum).padStart(3, '0')}`;
-    const packageSessions = studentData.packageSessions || 12;
+    const specificDates = studentData.specificDates || [];
+    const packageSessions = specificDates.length > 0 ? specificDates.length : (studentData.packageSessions || 12);
     const allowedLeaves = Math.floor(packageSessions / 4);
+    const isCurrentUserAdmin = currentUser.role === 'ADMIN';
+    const scheduleStatus = studentData.scheduleStatus || (isCurrentUserAdmin ? 'confirmed' : 'pending_admin');
 
     const newStudent: Student = {
       ...studentData,
       id: newId,
       code: newId,
+      facilityName: studentData.facilityName || 'Sân Cầu Lông Cầu Giấy',
+      courtName: studentData.facilityName || 'Sân Cầu Lông Cầu Giấy',
+      specificDates,
       packageSessions,
       attendedSessions: 0,
       remainingSessions: packageSessions,
       allowedLeaves,
       usedLeaves: 0,
-      carriedOverSessions: 0
+      carriedOverSessions: 0,
+      scheduleStatus,
+      scheduleConfirmedAt: scheduleStatus === 'confirmed' ? new Date().toISOString() : undefined,
+      scheduleConfirmedBy: scheduleStatus === 'confirmed' ? currentUser.name : undefined
     };
     
     setStudents(prev => [newStudent, ...prev]);
@@ -662,7 +808,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    showToast(`Đã thêm học viên mới: ${newStudent.name} (${newId}) - ${allowedLeaves} phép/tháng`, 'success');
+    if (scheduleStatus === 'pending_admin') {
+      const newAdminNotif: AdminNotification = {
+        id: `REQ-${Date.now()}`,
+        type: 'new_schedule_request',
+        title: 'Yêu cầu lưu lịch học mới',
+        message: `Học viên ${newStudent.name} đăng ký ${specificDates.length} buổi học trong tháng tại ${newStudent.facilityName} (${newStudent.shiftName || 'Ca học'})`,
+        studentId: newId,
+        studentName: newStudent.name,
+        studentPhone: newStudent.phone,
+        facilityId: newStudent.facilityId || 'CS01',
+        facilityName: newStudent.facilityName || 'Sân Cầu Lông Cầu Giấy',
+        shiftId: newStudent.shiftId || 'CA04',
+        shiftName: newStudent.shiftName || 'Ca Tối 1',
+        specificDates: specificDates,
+        status: 'unread',
+        createdAt: new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      };
+      setAdminNotifications(prev => [newAdminNotif, ...prev]);
+      showToast(`🔔 Đã thêm học viên ${newStudent.name}! Đã gửi yêu cầu lưu lịch đến Admin Hệ Thống.`, 'info');
+    } else {
+      if (specificDates.length > 0) {
+        createSessionsForDates(newStudent, specificDates);
+      }
+      showToast(`Đã thêm học viên mới: ${newStudent.name} (${newId}) - ${packageSessions} buổi, ${allowedLeaves} phép/tháng`, 'success');
+    }
   };
 
   const editStudent = (id: string, updates: Partial<Student>) => {
@@ -846,6 +1016,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Đã đánh dấu đọc tất cả thông báo', 'info');
   };
 
+  const pendingScheduleCount = useMemo(() => {
+    return students.filter(s => s.scheduleStatus === 'pending_admin').length;
+  }, [students]);
+
   return (
     <AppContext.Provider
       value={{
@@ -865,6 +1039,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sessions,
         payments,
         notifications,
+        adminNotifications,
+        confirmStudentSchedule,
+        rejectStudentSchedule,
+        pendingScheduleCount,
         addFacility,
         editFacility,
         deleteFacility,

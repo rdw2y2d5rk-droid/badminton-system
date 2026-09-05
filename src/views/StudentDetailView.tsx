@@ -38,6 +38,8 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
     addSessionsToStudent,
     renewStudentMonth,
     confirmPayment,
+    confirmStudentSchedule,
+    currentUser,
     isCoach,
     navigate
   } = useApp();
@@ -229,37 +231,69 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
 
         {/* Fixed Schedule & Leave Quota Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          {/* Fixed Venue & Shift */}
-          <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col justify-between">
+          {/* Sân & Ngày học cụ thể */}
+          <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold uppercase tracking-wider">
                 <Building2 className="w-4 h-4" />
-                <span>Đăng ký cơ sở & ca học cố định</span>
+                <span>Sân Cầu Lông & Lịch Học Trong Tháng</span>
               </div>
               <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-bold">
                 {currentStudent.month || 'Tháng 08/2026'}
               </span>
             </div>
-            <div className="mt-3 space-y-1.5 text-xs">
+            <div className="space-y-2 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Cơ sở & Sân:</span>
-                <span className="font-bold text-white">
-                  {currentStudent.facilityName || 'Cơ sở 1 - Cầu Giấy'} • {currentStudent.courtName || 'Sân 01'}
+                <span className="text-slate-400">Sân cầu lông:</span>
+                <span className="font-bold text-white text-right">
+                  {currentStudent.facilityName || currentStudent.courtName || 'Sân Cầu Lông Cầu Giấy'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">Ca học:</span>
                 <span className="font-bold text-emerald-300">
-                  {currentStudent.fixedShiftName || 'Ca Tối (18:00 - 19:30)'}
+                  {currentStudent.fixedShiftName || currentStudent.shiftName || 'Ca Tối (18:00 - 19:30)'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Ngày cố định trong tuần:</span>
-                <span className="font-extrabold text-amber-300">
-                  {currentStudent.fixedDays && currentStudent.fixedDays.length > 0
-                    ? currentStudent.fixedDays.join(', ')
-                    : 'Thứ 2, Thứ 4, Thứ 6'}
+                <span className="text-slate-400">Trạng thái duyệt lịch:</span>
+                {currentStudent.scheduleStatus === 'pending_admin' ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      Chờ Admin duyệt lịch
+                    </span>
+                    {currentUser.role === 'ADMIN' && (
+                      <button
+                        onClick={() => confirmStudentSchedule(currentStudent.id)}
+                        className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded shadow-xs cursor-pointer"
+                      >
+                        ✓ Duyệt Ngay
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    ✓ Lịch đã xác nhận
+                  </span>
+                )}
+              </div>
+
+              {/* Specific Dates List */}
+              <div className="pt-1.5 border-t border-slate-800">
+                <span className="text-slate-400 block mb-1">
+                  Các ngày học cụ thể ({currentStudent.specificDates?.length || currentStudent.packageSessions} ngày):
                 </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {currentStudent.specificDates && currentStudent.specificDates.length > 0 ? (
+                    currentStudent.specificDates.map(d => (
+                      <span key={d} className="px-2 py-0.5 bg-slate-800 text-emerald-300 rounded text-[11px] font-bold">
+                        {d.split('-')[2]}/{d.split('-')[1]}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-slate-400">Học các thứ 2, 4, 6 trong tháng</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
