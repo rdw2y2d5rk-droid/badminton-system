@@ -221,6 +221,9 @@ export interface SessionSchedule {
   coachAttendance?: CoachAttendanceRecord;
   attendanceRecords?: AttendanceRecordItem[];
   makeupStudents?: AttendanceRecordItem[]; // Học viên học bù thêm vào ca
+  isCoachRegistered?: boolean; // Ca do HLV tự đăng ký
+  registeredAt?: string;
+  note?: string;
 }
 
 export interface PaymentItem {
@@ -261,12 +264,14 @@ export interface NotificationItem {
 // Thông báo Admin duyệt lịch học & vận hành
 export interface AdminNotification {
   id: string;
-  type: 'new_schedule_request' | 'late_coach' | 'student_leave';
+  type: 'new_schedule_request' | 'late_coach' | 'student_leave' | 'coach_registration';
   title: string;
   message: string;
   studentId?: string;
   studentName?: string;
   studentPhone?: string;
+  coachId?: string;
+  coachName?: string;
   facilityId: string;
   facilityName: string;
   shiftId: string;

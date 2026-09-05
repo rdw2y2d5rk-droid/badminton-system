@@ -9,7 +9,8 @@ import {
   Plus,
   Calendar,
   AlertTriangle,
-  Flame
+  Flame,
+  Clock
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { INITIAL_USERS } from '../../data/mockData';
@@ -88,6 +89,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Thêm học viên</span>
+          </button>
+        )}
+
+        {/* Coach quick register session button */}
+        {isCoach && (
+          <button
+            onClick={() => navigate('schedule')}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Đăng ký ca dạy</span>
           </button>
         )}
 

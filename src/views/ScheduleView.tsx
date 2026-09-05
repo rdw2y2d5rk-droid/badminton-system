@@ -34,6 +34,8 @@ export const ScheduleView: React.FC = () => {
     rejectStudentSchedule,
     addSession,
     deleteSession,
+    registerCoachSession,
+    claimSessionForCoach,
     navigate,
     setAttendanceTarget,
     isCoach,
@@ -47,6 +49,9 @@ export const ScheduleView: React.FC = () => {
   const [selectedShift, setSelectedShift] = useState('ALL');
   const [selectedLevel, setSelectedLevel] = useState('ALL');
 
+  // Coach view mode: My sessions vs All sessions
+  const [coachScope, setCoachScope] = useState<'my_sessions' | 'all_sessions'>('my_sessions');
+
   // Pending approval students
   const pendingStudents = students.filter(s => s.scheduleStatus === 'pending_admin');
 
@@ -57,6 +62,23 @@ export const ScheduleView: React.FC = () => {
   const [modalClassId, setModalClassId] = useState(classes[0]?.id || 'BD-B01');
   const [modalCoachId, setModalCoachId] = useState('HLV001');
   const [modalDate, setModalDate] = useState('2026-08-28');
+
+  // Coach Self-Registration Modal
+  const [isCoachModalOpen, setIsCoachModalOpen] = useState(false);
+  const [coachFacilityId, setCoachFacilityId] = useState(facilities[0]?.id || 'CS01');
+  const [coachShiftId, setCoachShiftId] = useState(shifts[0]?.id || 'CA04');
+  const [coachClassId, setCoachClassId] = useState(classes[0]?.id || 'BD-B01');
+  const [coachDate, setCoachDate] = useState(() => {
+    const today = new Date();
+    if (today.getHours() >= 18) {
+      today.setDate(today.getDate() + 1);
+    }
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  });
+  const [coachNote, setCoachNote] = useState('');
 
   // Days of week for grid
   const weekDays = [
@@ -69,7 +91,7 @@ export const ScheduleView: React.FC = () => {
     { day: 'Chủ Nhật', date: '2026-08-30', dayNum: '30' }
   ];
 
-  const displaySessions = isCoach ? assignedSessions : sessions;
+  const displaySessions = isCoach && coachScope === 'my_sessions' ? assignedSessions : sessions;
 
   const filteredSessions = displaySessions.filter(session => {
     const matchesFacility =
@@ -97,6 +119,59 @@ export const ScheduleView: React.FC = () => {
     setModalDate('2026-08-28');
     setIsScheduleModalOpen(true);
   };
+
+  const openCoachModal = () => {
+    setCoachFacilityId(facilities[0]?.id || 'CS01');
+    setCoachShiftId(shifts[0]?.id || 'CA04');
+    setCoachClassId(classes[0]?.id || 'BD-B01');
+    const today = new Date();
+    if (today.getHours() >= 18) {
+      today.setDate(today.getDate() + 1);
+    }
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    setCoachDate(`${y}-${m}-${d}`);
+    setCoachNote('');
+    setIsCoachModalOpen(true);
+  };
+
+  const handleCoachRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ok = registerCoachSession({
+      facilityId: coachFacilityId,
+      shiftId: coachShiftId,
+      date: coachDate,
+      classId: coachClassId,
+      note: coachNote
+    });
+    if (ok) {
+      setIsCoachModalOpen(false);
+      setCoachNote('');
+    }
+  };
+
+  // Real-time time checking for Coach registration (strictly >= 3 hours before start time)
+  const selectedCoachShift = shifts.find(s => s.id === coachShiftId) || shifts[0];
+  const calculateDiffHours = (dateStr: string, timeStr: string) => {
+    if (!dateStr || !timeStr) return { diffHours: 0, isAllowed: false, text: '' };
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const [hh, mm] = timeStr.split(':').map(Number);
+    const targetDate = new Date(y, m - 1, d, hh, mm, 0);
+    const now = new Date();
+    const diff = (targetDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const isAllowed = diff >= 3;
+    const totalMins = Math.max(0, Math.round(diff * 60));
+    const h = Math.floor(totalMins / 60);
+    const min = totalMins % 60;
+    const text = diff < 0
+      ? 'Đã qua giờ bắt đầu'
+      : h > 0
+      ? `${h} tiếng ${min > 0 ? min + ' phút' : ''}`
+      : `${min} phút`;
+    return { diffHours: diff, isAllowed, text, targetDate };
+  };
+  const coachTimeCheck = calculateDiffHours(coachDate, selectedCoachShift?.startTime || '18:00');
 
   const handleCreateSchedule = (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,11 +227,24 @@ export const ScheduleView: React.FC = () => {
             Lịch Dạy & Lịch Học Tại Sân
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Admin sắp lịch phân bổ giảng viên, học viên, sân cầu lông và ca tập cụ thể
+            {isCoach
+              ? 'Giảng viên theo dõi ca dạy, chủ động đăng ký ca dạy trước tối thiểu 3 tiếng'
+              : 'Admin sắp lịch phân bổ giảng viên, học viên, sân cầu lông và ca tập cụ thể'}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Coach Self-Registration Button */}
+          {currentUser.role === 'COACH' && (
+            <button
+              onClick={openCoachModal}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              <Clock className="w-4 h-4" />
+              <span>+ Đăng Ký Ca Dạy (Trước ≥ 3h)</span>
+            </button>
+          )}
+
           {/* Admin Schedule button */}
           {currentUser.role !== 'COACH' && (
             <button
@@ -166,6 +254,32 @@ export const ScheduleView: React.FC = () => {
               <Plus className="w-4 h-4" />
               <span>+ Sắp Lịch Dạy & Học</span>
             </button>
+          )}
+
+          {/* Coach Scope Filter (My sessions vs All sessions) */}
+          {isCoach && (
+            <div className="bg-slate-100 p-1 rounded-2xl flex items-center gap-1 shadow-2xs">
+              <button
+                onClick={() => setCoachScope('my_sessions')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  coachScope === 'my_sessions'
+                    ? 'bg-white text-emerald-800 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Lịch của tôi
+              </button>
+              <button
+                onClick={() => setCoachScope('all_sessions')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  coachScope === 'all_sessions'
+                    ? 'bg-white text-emerald-800 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Tất cả ca tại sân
+              </button>
+            </div>
           )}
 
           <div className="bg-white border border-slate-200 rounded-2xl p-1 flex shadow-xs">
@@ -252,7 +366,7 @@ export const ScheduleView: React.FC = () => {
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1.5">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Ca học đăng ký:</span>
-                    <strong className="text-[#0F172A]">{student.shiftName || 'Ca 4 (18:00 - 19:30)'}</strong>
+                    <strong className="text-[#0F172A]">{student.shiftName || 'Ca 4'}</strong>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Số buổi học / Số phép:</span>
@@ -338,7 +452,7 @@ export const ScheduleView: React.FC = () => {
             <option value="ALL">Tất cả ca học</option>
             {shifts.map(s => (
               <option key={s.id} value={s.id}>
-                {s.name} ({s.timeSlot})
+                {s.name}
               </option>
             ))}
           </select>
@@ -430,9 +544,16 @@ export const ScheduleView: React.FC = () => {
                               <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-white/90 text-slate-800 shadow-2xs">
                                 {session.startTime}
                               </span>
-                              <span className="text-[10px] font-extrabold text-[#0F172A] bg-white/70 px-1 rounded truncate max-w-[90px]">
-                                {session.facilityName || session.court}
-                              </span>
+                              <div className="flex items-center gap-1">
+                                {session.isCoachRegistered && (
+                                  <span className="text-[9px] font-black px-1 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                                    HLV tự đăng ký
+                                  </span>
+                                )}
+                                <span className="text-[10px] font-extrabold text-[#0F172A] bg-white/70 px-1 rounded truncate max-w-[85px]">
+                                  {session.facilityName || session.court}
+                                </span>
+                              </div>
                             </div>
 
                             <div>
@@ -447,22 +568,37 @@ export const ScheduleView: React.FC = () => {
                               </div>
                             </div>
 
-                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-1">
                               <SessionStatusBadge status={session.status} />
 
-                              <button
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  handleStartAttendance(session.classId, session.date, session.id);
-                                }}
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg transition-colors cursor-pointer ${
-                                  session.attendanceDone
-                                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                                }`}
-                              >
-                                {session.attendanceDone ? '✓ Đã điểm danh' : 'Điểm danh'}
-                              </button>
+                              <div className="flex items-center gap-1">
+                                {isCoach && session.coachId !== (currentUser.coachId || currentUser.id) && session.status === 'Upcoming' ? (
+                                  <button
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      claimSessionForCoach(session.id);
+                                    }}
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-2xs"
+                                    title="Nhận đứng lớp ca này (Yêu cầu trước tối thiểu 3 tiếng)"
+                                  >
+                                    Nhận ca
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      handleStartAttendance(session.classId, session.date, session.id);
+                                    }}
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-lg transition-colors cursor-pointer ${
+                                      session.attendanceDone
+                                        ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                                    }`}
+                                  >
+                                    {session.attendanceDone ? '✓ Đã điểm danh' : 'Điểm danh'}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))
@@ -504,7 +640,16 @@ export const ScheduleView: React.FC = () => {
                     <td className="py-3.5 px-4 text-xs">
                       <strong className="text-[#0F172A]">{s.facilityName || s.court}</strong>
                     </td>
-                    <td className="py-3.5 px-4 font-bold text-[#0F172A]">{s.className}</td>
+                    <td className="py-3.5 px-4 font-bold text-[#0F172A]">
+                      <div className="flex items-center gap-1.5">
+                        <span>{s.className}</span>
+                        {s.isCoachRegistered && (
+                          <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200 shrink-0">
+                            HLV tự đăng ký
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-3.5 px-4">
                       <LevelBadge level={s.level} />
                     </td>
@@ -524,12 +669,22 @@ export const ScheduleView: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3.5 px-5 text-right space-x-2">
-                      <button
-                        onClick={() => handleStartAttendance(s.classId, s.date, s.id)}
-                        className="px-3 py-1 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                      >
-                        Điểm danh
-                      </button>
+                      {isCoach && s.coachId !== (currentUser.coachId || currentUser.id) && s.status === 'Upcoming' ? (
+                        <button
+                          onClick={() => claimSessionForCoach(s.id)}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                          title="Nhận đứng lớp ca này (Yêu cầu trước tối thiểu 3 tiếng)"
+                        >
+                          Nhận ca dạy
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleStartAttendance(s.classId, s.date, s.id)}
+                          className="px-3 py-1 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                        >
+                          Điểm danh
+                        </button>
+                      )}
                       {currentUser.role === 'ADMIN' && (
                         <button
                           onClick={() => {
@@ -584,7 +739,7 @@ export const ScheduleView: React.FC = () => {
               >
                 {shifts.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.timeSlot})
+                    {s.name}
                   </option>
                 ))}
               </select>
@@ -657,6 +812,177 @@ export const ScheduleView: React.FC = () => {
               className="px-5 py-2 text-xs font-bold text-white bg-[#10B981] hover:bg-emerald-600 rounded-xl shadow-xs cursor-pointer"
             >
               Lưu & Xuất Lịch
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Coach Self-Registration Modal with Strict >= 3h Validation */}
+      <Modal
+        isOpen={isCoachModalOpen}
+        onClose={() => setIsCoachModalOpen(false)}
+        title="Huấn Luyện Viên Đăng Ký Ca Dạy Tại Sân"
+      >
+        <form onSubmit={handleCoachRegister} className="space-y-4">
+          {/* Policy Banner */}
+          <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-950 flex items-start gap-2.5">
+            <Clock className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block font-bold">Quy Định Đăng Ký Giảng Dạy:</strong>
+              <p className="text-[11px] text-emerald-800 mt-0.5">
+                Giảng viên / HLV có thể chủ động đăng ký ca dạy tại các sân, nhưng <strong>phải đăng ký trước tối thiểu 3 tiếng</strong> so với giờ ca dạy bắt đầu để đảm bảo công tác chuẩn bị sân bãi & học viên.
+              </p>
+            </div>
+          </div>
+
+          {/* Sân cầu lông */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Sân cầu lông *</label>
+            <select
+              value={coachFacilityId}
+              onChange={e => setCoachFacilityId(e.target.value)}
+              className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold"
+            >
+              {facilities.map(f => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Ca dạy - ONLY shift name! */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Ca dạy *</label>
+              <select
+                value={coachShiftId}
+                onChange={e => setCoachShiftId(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold"
+              >
+                {shifts.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Ngày dạy */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Ngày dạy *</label>
+              <input
+                type="date"
+                required
+                value={coachDate}
+                onChange={e => setCoachDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold"
+              />
+            </div>
+          </div>
+
+          {/* Lớp học */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Lớp học phụ trách *</label>
+            <select
+              value={coachClassId}
+              onChange={e => setCoachClassId(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold"
+            >
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.levelLabel})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Ghi chú */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Ghi chú buổi dạy (Tùy chọn)</label>
+            <input
+              type="text"
+              placeholder="VD: Ca rèn luyện nâng cao, chuẩn bị thêm cầu lông..."
+              value={coachNote}
+              onChange={e => setCoachNote(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981]"
+            />
+          </div>
+
+          {/* Real-time Validation Card (At least 3 hours check) */}
+          <div
+            className={`p-4 rounded-2xl border transition-all ${
+              coachTimeCheck.isAllowed
+                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                : 'bg-rose-50/80 border-rose-200 text-rose-950'
+            }`}
+          >
+            <div className="flex items-center justify-between font-bold text-xs mb-2">
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4" />
+                Kiểm tra điều kiện đăng ký trước tối thiểu 3 tiếng:
+              </span>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-black ${
+                  coachTimeCheck.isAllowed
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-rose-600 text-white'
+                }`}
+              >
+                {coachTimeCheck.isAllowed ? '✓ Đủ Điều Kiện (≥ 3h)' : '✕ Không Đủ Điều Kiện (< 3h)'}
+              </span>
+            </div>
+
+            <div className="text-xs space-y-1 bg-white/70 p-2.5 rounded-xl border border-slate-200/50">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Giờ ca dạy bắt đầu:</span>
+                <strong className="text-[#0F172A]">
+                  {selectedCoachShift.startTime} ngày {coachDate.split('-').reverse().join('/')}
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Khoảng cách đến giờ dạy:</span>
+                <strong className={coachTimeCheck.isAllowed ? 'text-emerald-700 font-extrabold' : 'text-rose-700 font-extrabold'}>
+                  {coachTimeCheck.text}
+                </strong>
+              </div>
+            </div>
+
+            <div className="mt-2 text-[11px] leading-relaxed">
+              {coachTimeCheck.isAllowed ? (
+                <span className="text-emerald-800 font-medium flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Hợp lệ: Bạn đang đăng ký trước giờ dạy <strong>{coachTimeCheck.text}</strong> (thỏa mãn tối thiểu 3h). Hệ thống sẽ tự động lưu và gửi thông báo đến Ban Quản Trị.</span>
+                </span>
+              ) : (
+                <span className="text-rose-800 font-bold flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>Không thể đăng ký: Ca dạy bắt đầu sau <strong>{coachTimeCheck.text}</strong> (&lt; 3 tiếng) hoặc đã qua giờ. Quy định yêu cầu HLV phải đăng ký trước tối thiểu 3 tiếng!</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Form Actions */}
+          <div className="pt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCoachModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={!coachTimeCheck.isAllowed}
+              className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5 ${
+                coachTimeCheck.isAllowed
+                  ? 'bg-[#10B981] hover:bg-emerald-600 cursor-pointer'
+                  : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{coachTimeCheck.isAllowed ? 'Xác Nhận Đăng Ký Ca Dạy' : 'Khóa Đăng Ký (< 3h)'}</span>
             </button>
           </div>
         </form>

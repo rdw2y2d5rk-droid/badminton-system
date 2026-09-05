@@ -1106,7 +1106,7 @@ export const INITIAL_ADMIN_NOTIFICATIONS: AdminNotification[] = [
     facilityId: 'CS01',
     facilityName: 'Sân Cầu Lông Cầu Giấy',
     shiftId: 'CA04',
-    shiftName: 'Ca Tối 1 (18:00 - 19:30)',
+    shiftName: 'Ca Tối 1',
     specificDates: ['2026-08-03', '2026-08-07', '2026-08-10', '2026-08-14', '2026-08-17', '2026-08-21', '2026-08-24', '2026-08-28'],
     status: 'unread',
     createdAt: '28/08/2026 14:20'
@@ -1122,7 +1122,7 @@ export const INITIAL_ADMIN_NOTIFICATIONS: AdminNotification[] = [
     facilityId: 'CS02',
     facilityName: 'Sân Cầu Lông Ba Đình',
     shiftId: 'CA01',
-    shiftName: 'Ca Sáng 1 (06:00 - 07:30)',
+    shiftName: 'Ca Sáng 1',
     specificDates: ['2026-08-04', '2026-08-08', '2026-08-11', '2026-08-15', '2026-08-18', '2026-08-22'],
     status: 'unread',
     createdAt: '28/08/2026 16:05'

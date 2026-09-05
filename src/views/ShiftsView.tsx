@@ -382,7 +382,7 @@ export const ShiftsView: React.FC = () => {
         <Modal
           isOpen={!!detailShift}
           onClose={() => setDetailShift(null)}
-          title={`Chi Tiết Ca Học: ${detailShift.name} (${detailShift.timeSlot})`}
+          title={`Chi Tiết Ca Học: ${detailShift.name}`}
         >
           <div className="space-y-4">
             <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">

@@ -285,7 +285,7 @@ export const MonthlyAttendanceMatrix: React.FC = () => {
               <option value="ALL">Tất cả ca học</option>
               {shifts.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.timeSlot})
+                  {s.name}
                 </option>
               ))}
             </select>

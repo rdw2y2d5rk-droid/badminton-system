@@ -176,7 +176,7 @@ export const StudentsView: React.FC = () => {
       facilityName: targetFacility?.name || 'Sân Cầu Lông Cầu Giấy',
       courtName: targetFacility?.name || 'Sân Cầu Lông Cầu Giấy',
       fixedShiftId: targetShift?.id,
-      fixedShiftName: targetShift?.name ? `${targetShift.name} (${targetShift.timeSlot})` : '18:00 - 19:30',
+      fixedShiftName: targetShift?.name || 'Ca Tối 1',
       shiftId: targetShift?.id,
       shiftName: targetShift?.name || 'Ca Tối 1',
       timeSlot: targetShift?.timeSlot || '18:00 - 19:30',
@@ -559,7 +559,7 @@ export const StudentsView: React.FC = () => {
                           <span>{student.facilityName || student.courtName || 'Sân Cầu Lông Cầu Giấy'}</span>
                         </strong>
                         <span className="text-slate-400 text-[11px]">
-                          {student.shiftName || student.fixedShiftName || 'Ca Tối 1 (18:00 - 19:30)'}
+                          {student.shiftName || student.fixedShiftName || 'Ca Tối 1'}
                         </span>
                       </td>
                       <td className="py-4 px-4 text-xs">
@@ -775,7 +775,7 @@ export const StudentsView: React.FC = () => {
               >
                 {shifts.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.timeSlot})
+                    {s.name}
                   </option>
                 ))}
               </select>

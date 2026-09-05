@@ -75,6 +75,14 @@ interface AppContextType {
   addSession: (sessionData: Omit<SessionSchedule, 'id'>) => void;
   editSession: (id: string, updates: Partial<SessionSchedule>) => void;
   deleteSession: (id: string) => void;
+  registerCoachSession: (params: {
+    facilityId: string;
+    shiftId: string;
+    date: string;
+    classId?: string;
+    note?: string;
+  }) => boolean;
+  claimSessionForCoach: (sessionId: string) => boolean;
 
   // Attendance actions
   saveAttendance: (sessionId: string, records: AttendanceRecordItem[], classId: string, date: string) => void;
@@ -178,7 +186,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         facilityName: s.facilityName || (idx % 2 === 0 ? 'Sân Cầu Lông Cầu Giấy' : 'Sân Cầu Lông Ba Đình'),
         courtName: s.courtName || s.facilityName || (idx % 2 === 0 ? 'Sân Cầu Lông Cầu Giấy' : 'Sân Cầu Lông Ba Đình'),
         fixedShiftId: s.fixedShiftId || 'CA04',
-        fixedShiftName: s.fixedShiftName || 'Ca Tối 1 (18:00 - 19:30)',
+        fixedShiftName: s.fixedShiftName || 'Ca Tối 1',
         shiftId: s.shiftId || 'CA04',
         shiftName: s.shiftName || 'Ca Tối 1',
         timeSlot: s.timeSlot || '18:00 - 19:30',
@@ -343,7 +351,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       code: newCode
     };
     setShifts(prev => [...prev, newShift]);
-    showToast(`Đã tạo ca học mới: ${newShift.name} (${newShift.timeSlot})`, 'success');
+    showToast(`Đã tạo ca học mới: ${newShift.name}`, 'success');
   };
 
   const editShift = (id: string, updates: Partial<ShiftInfo>) => {
@@ -375,6 +383,190 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteSession = (id: string) => {
     setSessions(prev => prev.filter(s => s.id !== id));
     showToast('Đã xoá ca học khỏi lịch!', 'info');
+  };
+
+  // Coach registers a teaching session (MUST be at least 3 hours before start time)
+  const registerCoachSession = (params: {
+    facilityId: string;
+    shiftId: string;
+    date: string; // YYYY-MM-DD
+    classId?: string;
+    note?: string;
+  }): boolean => {
+    const targetShift = shifts.find(s => s.id === params.shiftId);
+    const targetFacility = facilities.find(f => f.id === params.facilityId);
+    const targetClass = params.classId ? classes.find(c => c.id === params.classId) : classes[0];
+
+    if (!targetShift) {
+      showToast('Vui lòng chọn ca học hợp lệ!', 'error');
+      return false;
+    }
+
+    // Parse session start time
+    const [year, month, day] = params.date.split('-').map(Number);
+    const [hours, minutes] = targetShift.startTime.split(':').map(Number);
+    const sessionStartTime = new Date(year, month - 1, day, hours, minutes, 0);
+    const now = new Date();
+
+    const diffMs = sessionStartTime.getTime() - now.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    // Business Rule: Registration must occur at least 3 hours before session start time
+    if (diffHours < 3) {
+      if (diffHours < 0) {
+        showToast('Không thể đăng ký: Ca học này đã diễn ra trong quá khứ!', 'error');
+      } else {
+        const remainingMinutes = Math.max(0, Math.round(diffHours * 60));
+        const hrs = Math.floor(remainingMinutes / 60);
+        const mins = remainingMinutes % 60;
+        const timeRemainingText = hrs > 0 ? `${hrs} tiếng ${mins > 0 ? mins + ' phút' : ''}` : `${mins} phút`;
+        showToast(
+          `Không thể đăng ký! Giảng viên phải đăng ký dạy trước tối thiểu 3 tiếng so với giờ ca dạy (Hiện chỉ còn ${timeRemainingText} nữa).`,
+          'error'
+        );
+      }
+      return false;
+    }
+
+    // Determine day of week
+    const dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+    const dayOfWeek = dayNames[sessionStartTime.getDay()];
+
+    const coachName = currentUser.name || 'HLV Giảng Dạy';
+    const coachId = currentUser.coachId || currentUser.id;
+    const coachAvatar = currentUser.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80';
+
+    const newSessionId = `SES-COACH-${Date.now()}`;
+    const newSession: SessionSchedule = {
+      id: newSessionId,
+      classId: targetClass?.id || 'BD-OPEN',
+      className: targetClass ? targetClass.name : `Lớp Thể Lực (${coachName})`,
+      level: targetClass?.level || 'Beginner',
+      facilityId: targetFacility?.id,
+      facilityName: targetFacility?.name || 'Sân Cầu Lông',
+      court: targetFacility?.name || 'Sân Cầu Lông',
+      shiftId: targetShift.id,
+      coachId,
+      coachName,
+      coachAvatar,
+      date: params.date,
+      dayOfWeek,
+      startTime: targetShift.startTime,
+      endTime: targetShift.endTime,
+      timeSlot: targetShift.timeSlot,
+      status: 'Upcoming',
+      attendanceDone: false,
+      totalStudents: targetClass?.currentStudentsCount || 8,
+      attendanceRecords: [],
+      makeupStudents: [],
+      coachAttendance: { status: 'Present' },
+      isCoachRegistered: true,
+      registeredAt: new Date().toISOString(),
+      note: params.note
+    };
+
+    setSessions(prev => [newSession, ...prev]);
+
+    // Create Admin notification
+    const adminNotif: AdminNotification = {
+      id: `REQ-COACH-${Date.now()}`,
+      type: 'coach_registration',
+      title: 'Giảng viên đăng ký ca dạy mới',
+      message: `HLV ${coachName} đã đăng ký ca dạy ${targetShift.name} ngày ${params.date} tại ${targetFacility?.name || 'Sân cầu lông'} (Hợp lệ: trước giờ dạy ${diffHours.toFixed(1)} tiếng).`,
+      coachId,
+      coachName,
+      facilityId: targetFacility?.id || '',
+      facilityName: targetFacility?.name || 'Sân Cầu Lông',
+      shiftId: targetShift.id,
+      shiftName: targetShift.name,
+      status: 'unread',
+      createdAt: new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+    };
+    setAdminNotifications(prev => [adminNotif, ...prev]);
+
+    showToast(
+      `Đăng ký ca dạy thành công! (Trước ca dạy ${diffHours.toFixed(1)} tiếng, đạt quy định tối thiểu 3h)`,
+      'success'
+    );
+    try {
+      confetti({ particleCount: 60, spread: 65, origin: { y: 0.7 } });
+    } catch (err) {}
+    return true;
+  };
+
+  // Coach claims / takes over an open session (MUST be at least 3 hours before start time)
+  const claimSessionForCoach = (sessionId: string): boolean => {
+    const targetSession = sessions.find(s => s.id === sessionId);
+    if (!targetSession) {
+      showToast('Không tìm thấy ca học!', 'error');
+      return false;
+    }
+
+    const [year, month, day] = targetSession.date.split('-').map(Number);
+    const [hours, minutes] = targetSession.startTime.split(':').map(Number);
+    const sessionStartTime = new Date(year, month - 1, day, hours, minutes, 0);
+    const now = new Date();
+
+    const diffMs = sessionStartTime.getTime() - now.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    if (diffHours < 3) {
+      if (diffHours < 0) {
+        showToast('Không thể nhận ca: Ca học này đã diễn ra!', 'error');
+      } else {
+        const remainingMinutes = Math.max(0, Math.round(diffHours * 60));
+        const hrs = Math.floor(remainingMinutes / 60);
+        const mins = remainingMinutes % 60;
+        const timeRemainingText = hrs > 0 ? `${hrs} tiếng ${mins > 0 ? mins + ' phút' : ''}` : `${mins} phút`;
+        showToast(
+          `Không thể nhận ca! Giảng viên phải đăng ký/nhận ca trước tối thiểu 3 tiếng so với giờ ca dạy (Hiện chỉ còn ${timeRemainingText} nữa).`,
+          'error'
+        );
+      }
+      return false;
+    }
+
+    const coachName = currentUser.name || 'HLV Giảng Dạy';
+    const coachId = currentUser.coachId || currentUser.id;
+    const coachAvatar = currentUser.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80';
+
+    setSessions(prev =>
+      prev.map(s =>
+        s.id === sessionId
+          ? {
+              ...s,
+              coachId,
+              coachName,
+              coachAvatar,
+              isCoachRegistered: true,
+              registeredAt: new Date().toISOString()
+            }
+          : s
+      )
+    );
+
+    const shiftObj = targetSession.shiftId ? shifts.find(sh => sh.id === targetSession.shiftId) : null;
+    const shiftDisplayName = shiftObj ? shiftObj.name : 'Ca học';
+
+    // Admin notification
+    const adminNotif: AdminNotification = {
+      id: `REQ-CLAIM-${Date.now()}`,
+      type: 'coach_registration',
+      title: 'Giảng viên nhận ca dạy',
+      message: `HLV ${coachName} đã nhận đứng lớp ca ${targetSession.className} (${shiftDisplayName}, ngày ${targetSession.date}) tại ${targetSession.facilityName || targetSession.court}.`,
+      coachId,
+      coachName,
+      facilityId: targetSession.facilityId || '',
+      facilityName: targetSession.facilityName || targetSession.court,
+      shiftId: targetSession.shiftId || '',
+      shiftName: shiftDisplayName,
+      status: 'unread',
+      createdAt: new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+    };
+    setAdminNotifications(prev => [adminNotif, ...prev]);
+
+    showToast(`Đã nhận ca dạy thành công! (Trước giờ dạy ${diffHours.toFixed(1)} tiếng)`, 'success');
+    return true;
   };
 
   // Coach Attendance Action
@@ -1055,6 +1247,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addSession,
         editSession,
         deleteSession,
+        registerCoachSession,
+        claimSessionForCoach,
         saveAttendance,
         saveCoachAttendance,
         addMakeupStudentToSession,

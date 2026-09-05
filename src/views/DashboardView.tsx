@@ -90,13 +90,22 @@ export const DashboardView: React.FC = () => {
               </p>
             </div>
 
-            <button
-              onClick={() => navigate('attendance')}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#10B981] hover:bg-emerald-400 text-white font-bold text-sm shadow-md shadow-emerald-900/30 transition-all self-start md:self-auto cursor-pointer"
-            >
-              <CheckSquare className="w-4 h-4" />
-              <span>Điểm Danh Ngay Tại Sân</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+              <button
+                onClick={() => navigate('schedule')}
+                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900/90 hover:bg-slate-900 text-[#A3E635] font-bold text-sm border border-emerald-500/30 shadow-md transition-all cursor-pointer"
+              >
+                <Clock className="w-4 h-4" />
+                <span>Đăng Ký Ca Dạy (≥ 3h)</span>
+              </button>
+              <button
+                onClick={() => navigate('attendance')}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#10B981] hover:bg-emerald-400 text-white font-bold text-sm shadow-md shadow-emerald-900/30 transition-all cursor-pointer"
+              >
+                <CheckSquare className="w-4 h-4" />
+                <span>Điểm Danh Ngay Tại Sân</span>
+              </button>
+            </div>
           </div>
         </div>
 

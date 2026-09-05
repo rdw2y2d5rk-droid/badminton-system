@@ -252,7 +252,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">Ca học:</span>
                 <span className="font-bold text-emerald-300">
-                  {currentStudent.fixedShiftName || currentStudent.shiftName || 'Ca Tối (18:00 - 19:30)'}
+                  {currentStudent.fixedShiftName || currentStudent.shiftName || 'Ca Tối 1'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
