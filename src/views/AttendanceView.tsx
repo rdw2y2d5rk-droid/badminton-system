@@ -686,7 +686,7 @@ export const AttendanceView: React.FC = () => {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Chọn học viên muốn học bù *
             </label>
-            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+            <div className="max-h-48 overflow-y-auto no-scrollbar border border-slate-200 rounded-xl divide-y divide-slate-100">
               {students
                 .filter(s => {
                   const isNotInClass = s.classId !== selectedClassId;

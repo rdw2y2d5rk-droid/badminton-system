@@ -611,7 +611,7 @@ export const StudentsView: React.FC = () => {
         onClose={() => setIsAddModalOpen(false)}
         title="Thêm Học Viên Mới & Đăng Ký Lịch Cố Định"
       >
-        <form onSubmit={handleCreateStudent} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        <form onSubmit={handleCreateStudent} className="space-y-4 max-h-[75vh] overflow-y-auto no-scrollbar pr-1">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Họ và tên *</label>
@@ -907,7 +907,7 @@ export const StudentsView: React.FC = () => {
         onClose={() => setIsImportModalOpen(false)}
         title="Import Danh Sách Học Viên Từ File Excel / CSV"
       >
-        <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        <div className="space-y-4 max-h-[75vh] overflow-y-auto no-scrollbar pr-1">
           {/* Instructions and Download Template */}
           <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>

@@ -46,7 +46,7 @@ export const Modal: React.FC<ModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto no-scrollbar">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -80,7 +80,7 @@ export const Modal: React.FC<ModalProps> = ({
             </div>
 
             {/* Body */}
-            <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+            <div className="p-6 max-h-[80vh] overflow-y-auto no-scrollbar">{children}</div>
           </motion.div>
         </div>
       )}

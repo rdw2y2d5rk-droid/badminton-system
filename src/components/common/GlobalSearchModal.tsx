@@ -57,7 +57,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen = f
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 pt-20 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 pt-20 overflow-y-auto no-scrollbar">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -94,7 +94,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen = f
             </div>
 
             {/* Results Section */}
-            <div className="max-h-[60vh] overflow-y-auto p-4 space-y-4">
+            <div className="max-h-[60vh] overflow-y-auto no-scrollbar p-4 space-y-4">
               {!query.trim() ? (
                 <div className="py-8 text-center text-slate-400 text-sm">
                   <p>Nhập từ khóa để tìm kiếm nhanh trong toàn bộ hệ thống</p>
