@@ -24,6 +24,7 @@ import { useApp } from '../context/AppContext';
 import { AttendanceStatus, CoachAttendanceRecord } from '../types';
 import { LevelBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
+import { MonthlyAttendanceMatrix } from '../components/attendance/MonthlyAttendanceMatrix';
 
 export const AttendanceView: React.FC = () => {
   const {
@@ -40,6 +41,8 @@ export const AttendanceView: React.FC = () => {
     attendanceTarget,
     setAttendanceTarget
   } = useApp();
+
+  const [viewTab, setViewTab] = useState<'session' | 'monthly'>('session');
 
   const availableClasses = isCoach ? assignedClasses : classes;
   const initialClassId = attendanceTarget?.classId || availableClasses[0]?.id || 'BD-B01';
@@ -201,7 +204,7 @@ export const AttendanceView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-24 md:pb-12">
+    <div className={`space-y-6 mx-auto pb-24 md:pb-12 ${viewTab === 'monthly' ? 'max-w-7xl' : 'max-w-5xl'}`}>
       {/* Top Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -213,31 +216,66 @@ export const AttendanceView: React.FC = () => {
             Điểm Danh Học Viên & Huấn Luyện Viên
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Ghi nhận chuyên cần, chấm công HLV và tiếp nhận học viên học bù tại cơ sở
+            Ghi nhận chuyên cần, chấm công HLV và tiếp nhận học viên học bù tại sân
           </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          {!isCoach && (
-            <button
-              onClick={() => setIsMakeupModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-md shadow-amber-900/15 transition-all cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>+ Thêm Học Viên Học Bù</span>
-            </button>
-          )}
+        {/* Action Buttons (Session Mode) */}
+        {viewTab === 'session' && (
+          <div className="flex items-center gap-2">
+            {!isCoach && (
+              <button
+                onClick={() => setIsMakeupModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-md shadow-amber-900/15 transition-all cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>+ Thêm Học Viên Học Bù</span>
+              </button>
+            )}
 
-          <button
-            onClick={handleSaveAttendance}
-            className="flex items-center gap-2 px-6 py-3 bg-[#10B981] hover:bg-emerald-600 active:scale-95 text-white font-extrabold text-sm rounded-2xl shadow-md shadow-emerald-900/20 transition-all cursor-pointer"
-          >
-            <Save className="w-5 h-5" />
-            <span>LƯU ĐIỂM DANH</span>
-          </button>
-        </div>
+            <button
+              onClick={handleSaveAttendance}
+              className="flex items-center gap-2 px-6 py-3 bg-[#10B981] hover:bg-emerald-600 active:scale-95 text-white font-extrabold text-sm rounded-2xl shadow-md shadow-emerald-900/20 transition-all cursor-pointer"
+            >
+              <Save className="w-5 h-5" />
+              <span>LƯU ĐIỂM DANH</span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* View Mode Switcher */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80 w-fit">
+        <button
+          onClick={() => setViewTab('session')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            viewTab === 'session'
+              ? 'bg-white text-[#0F172A] shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <span>📋 Điểm Danh Ca Học</span>
+        </button>
+        <button
+          onClick={() => setViewTab('monthly')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            viewTab === 'monthly'
+              ? 'bg-[#10B981] text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          <span>Ma Trận Tháng (31 Ngày)</span>
+          <span className="ml-1 text-[10px] font-black px-1.5 py-0.5 rounded-full bg-white/20 text-white">
+            Excel
+          </span>
+        </button>
+      </div>
+
+      {viewTab === 'monthly' ? (
+        <MonthlyAttendanceMatrix />
+      ) : (
+        <>
 
       {/* Class & Date Selection Bar */}
       <div className="p-5 bg-white rounded-3xl border border-slate-100 shadow-xs space-y-4">
@@ -662,6 +700,8 @@ export const AttendanceView: React.FC = () => {
           <span>LƯU ĐIỂM DANH</span>
         </button>
       </div>
+        </>
+      )}
 
       {/* Make-up Student Selection Modal */}
       <Modal

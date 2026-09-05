@@ -1,0 +1,605 @@
+import React, { useState, useMemo } from 'react';
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Filter,
+  Search,
+  CheckCircle2,
+  Clock,
+  Sparkles,
+  Users,
+  Building2,
+  AlertCircle
+} from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+import { AttendanceStatus } from '../../types';
+
+export const MonthlyAttendanceMatrix: React.FC = () => {
+  const {
+    students,
+    facilities,
+    shifts,
+    sessions,
+    saveAttendance,
+    showToast,
+    currentUser,
+    isCoach,
+    assignedStudents
+  } = useApp();
+
+  // Selected Month (YYYY-MM)
+  const [selectedMonth, setSelectedMonth] = useState('2026-08');
+  const [selectedFacility, setSelectedFacility] = useState('ALL');
+  const [selectedShift, setSelectedShift] = useState('ALL');
+  const [selectedScheduleStatus, setSelectedScheduleStatus] = useState<'ALL' | 'confirmed' | 'pending_admin'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Local overrides for matrix cell attendance: { `${studentId}_${dateStr}`: AttendanceStatus }
+  const [localAttendance, setLocalAttendance] = useState<Record<string, AttendanceStatus>>({});
+
+  // Parse Year and Month number
+  const [year, monthNum] = useMemo(() => {
+    const parts = selectedMonth.split('-');
+    return [parseInt(parts[0], 10), parseInt(parts[1], 10)];
+  }, [selectedMonth]);
+
+  // Days in month calculation (28 - 31)
+  const daysInMonth = useMemo(() => {
+    const totalDays = new Date(year, monthNum, 0).getDate();
+    return Array.from({ length: totalDays }, (_, i) => {
+      const day = i + 1;
+      const dateStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const d = new Date(year, monthNum - 1, day);
+      const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+      const dayOfWeek = dayNames[d.getDay()];
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const isToday = dateStr === '2026-08-28';
+
+      return {
+        day,
+        dateStr,
+        dayOfWeek,
+        isWeekend,
+        isToday
+      };
+    });
+  }, [year, monthNum]);
+
+  // Base students list
+  const baseStudents = isCoach ? assignedStudents : students;
+
+  // Filtered Students
+  const filteredStudents = useMemo(() => {
+    return baseStudents.filter(student => {
+      const matchesSearch =
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.phone.includes(searchQuery);
+
+      const matchesFacility =
+        selectedFacility === 'ALL' ||
+        student.facilityId === selectedFacility ||
+        student.facilityName === facilities.find(f => f.id === selectedFacility)?.name;
+
+      const matchesShift =
+        selectedShift === 'ALL' ||
+        student.shiftId === selectedShift ||
+        student.fixedShiftId === selectedShift;
+
+      const matchesScheduleStatus =
+        selectedScheduleStatus === 'ALL' ||
+        (selectedScheduleStatus === 'pending_admin' && student.scheduleStatus === 'pending_admin') ||
+        (selectedScheduleStatus === 'confirmed' && student.scheduleStatus !== 'pending_admin');
+
+      return matchesSearch && matchesFacility && matchesShift && matchesScheduleStatus;
+    });
+  }, [baseStudents, searchQuery, selectedFacility, selectedShift, selectedScheduleStatus, facilities]);
+
+  // Compute "TỔNG ĐĂNG KÝ THEO NGÀY" (Count students scheduled on each day of month)
+  const dayRegistrationCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    daysInMonth.forEach(d => {
+      const count = filteredStudents.filter(s => s.specificDates?.includes(d.dateStr)).length;
+      counts[d.dateStr] = count;
+    });
+    return counts;
+  }, [daysInMonth, filteredStudents]);
+
+  // Lookup attendance status for a student on a specific date
+  const getAttendanceForStudentDate = (studentId: string, dateStr: string): AttendanceStatus | 'Scheduled' | 'None' => {
+    // 1. Check local unsaved toggle
+    const localKey = `${studentId}_${dateStr}`;
+    if (localAttendance[localKey]) {
+      return localAttendance[localKey];
+    }
+
+    // 2. Check existing sessions
+    const matchedSession = sessions.find(s => s.date === dateStr);
+    if (matchedSession?.attendanceRecords) {
+      const record = matchedSession.attendanceRecords.find(r => r.studentId === studentId);
+      if (record) return record.status;
+    }
+
+    // 3. If student has this specific date registered
+    const student = students.find(s => s.id === studentId);
+    if (student?.specificDates?.includes(dateStr)) {
+      return 'Scheduled';
+    }
+
+    return 'None';
+  };
+
+  // Toggle attendance cell on click
+  const handleCellClick = (studentId: string, studentName: string, dateStr: string) => {
+    const current = getAttendanceForStudentDate(studentId, dateStr);
+    const localKey = `${studentId}_${dateStr}`;
+
+    let nextStatus: AttendanceStatus;
+    if (current === 'Scheduled' || current === 'None') {
+      nextStatus = 'Present';
+    } else if (current === 'Present') {
+      nextStatus = 'Excused';
+    } else if (current === 'Excused') {
+      nextStatus = 'Absent';
+    } else {
+      nextStatus = 'Present';
+    }
+
+    setLocalAttendance(prev => ({
+      ...prev,
+      [localKey]: nextStatus
+    }));
+
+    const statusLabels: Record<AttendanceStatus, string> = {
+      Present: 'Có mặt (✓)',
+      Excused: 'Nghỉ có phép (P)',
+      Absent: 'Vắng không phép (K)'
+    };
+    showToast(`${studentName} [${dateStr.split('-').reverse().join('/')}]: ${statusLabels[nextStatus]}`, 'info');
+  };
+
+  // Export Matrix to CSV
+  const exportToCSV = () => {
+    const headers = [
+      'STT',
+      'Mã HV',
+      'Họ và Tên',
+      'Sân Cầu Lông',
+      'Ca Học',
+      'Tổng Ngày Đăng Ký',
+      'Trạng Thái Lịch',
+      ...daysInMonth.map(d => `${d.day}/${monthNum} (${d.dayOfWeek})`)
+    ];
+
+    const rows = filteredStudents.map((st, idx) => {
+      const dayValues = daysInMonth.map(d => {
+        const status = getAttendanceForStudentDate(st.id, d.dateStr);
+        if (status === 'Present') return 'V';
+        if (status === 'Excused') return 'P';
+        if (status === 'Absent') return 'K';
+        if (status === 'Scheduled') return '●';
+        return '';
+      });
+
+      return [
+        idx + 1,
+        st.code,
+        `"${st.name}"`,
+        `"${st.facilityName || 'Sân Cầu Giấy'}"`,
+        `"${st.shiftName || 'Ca 4'}"`,
+        st.specificDates?.length || st.packageSessions || 12,
+        st.scheduleStatus === 'pending_admin' ? 'Chờ Admin lưu lịch' : 'Đã duyệt & lưu lịch',
+        ...dayValues
+      ].join(',');
+    });
+
+    // Add Top Summary Row
+    const summaryRow = [
+      '',
+      '',
+      '"TỔNG ĐĂNG KÝ HỌC THEO NGÀY"',
+      '',
+      '',
+      '',
+      '',
+      ...daysInMonth.map(d => dayRegistrationCounts[d.dateStr] || 0)
+    ].join(',');
+
+    const csvContent = '\uFEFF' + [headers.join(','), summaryRow, ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Ma_Tran_Diem_Danh_Thang_${monthNum}_${year}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Đã xuất ma trận điểm danh 31 ngày ra file CSV thành công!', 'success');
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header & Controls */}
+      <div className="p-5 bg-white rounded-3xl border border-slate-100 shadow-xs space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 mb-1.5">
+              <Calendar className="w-3.5 h-3.5 text-[#10B981]" />
+              <span>Ma Trận 31 Ngày Theo Ngày Học Cụ Thể Trong Tháng</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-extrabold text-[#0F172A] tracking-tight">
+              Bảng Điểm Danh Lưới Tháng (Ma Trận 31 Ngày)
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Tự động đồng bộ các ngày học viên đăng ký cụ thể đã được Admin lưu lịch — Khớp 100% định dạng bảng tính Excel tại sân
+            </p>
+          </div>
+
+          {/* Month Navigator & Export */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-2xl border border-slate-200">
+              <label className="text-xs font-bold text-slate-500">Tháng:</label>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(e.target.value)}
+                className="bg-transparent font-bold text-xs text-[#0F172A] outline-none cursor-pointer"
+              />
+            </div>
+
+            <button
+              onClick={exportToCSV}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#10B981] font-bold text-xs rounded-xl border border-emerald-200 shadow-2xs transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Xuất Excel (CSV)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Sân Cầu Lông */}
+            <select
+              value={selectedFacility}
+              onChange={e => setSelectedFacility(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
+            >
+              <option value="ALL">Tất cả sân cầu lông</option>
+              {facilities.map(f => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Ca học */}
+            <select
+              value={selectedShift}
+              onChange={e => setSelectedShift(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
+            >
+              <option value="ALL">Tất cả ca học</option>
+              {shifts.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.timeSlot})
+                </option>
+              ))}
+            </select>
+
+            {/* Trạng thái duyệt lịch */}
+            <select
+              value={selectedScheduleStatus}
+              onChange={e => setSelectedScheduleStatus(e.target.value as any)}
+              className="px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
+            >
+              <option value="ALL">Tất cả trạng thái lịch</option>
+              <option value="confirmed">Đã Admin lưu lịch (✓)</option>
+              <option value="pending_admin">Chờ Admin lưu lịch (⏳)</option>
+            </select>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Tìm học viên theo tên, SĐT..."
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-[#10B981]"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 31-Day Attendance Matrix Table */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              {/* Row 1: Header Ngày 1 - 31 */}
+              <tr className="bg-slate-900 text-white">
+                <th className="sticky left-0 z-20 bg-slate-900 py-3 px-3 text-left font-extrabold w-12 border-r border-slate-800">
+                  STT
+                </th>
+                <th className="sticky left-12 z-20 bg-slate-900 py-3 px-4 text-left font-extrabold min-w-[190px] border-r border-slate-800">
+                  Học viên & Lớp
+                </th>
+                <th className="py-3 px-2 text-center font-extrabold min-w-[110px] border-r border-slate-800">
+                  Sân Cầu Lông
+                </th>
+                <th className="py-3 px-2 text-center font-extrabold min-w-[80px] border-r border-slate-800">
+                  Ca học
+                </th>
+                <th className="py-3 px-2 text-center font-extrabold min-w-[70px] border-r border-slate-800">
+                  Đã chọn
+                </th>
+
+                {/* 31 Columns */}
+                {daysInMonth.map(d => (
+                  <th
+                    key={d.day}
+                    className={`py-2 px-1 text-center min-w-[34px] max-w-[38px] border-r border-slate-800 ${
+                      d.isToday
+                        ? 'bg-[#10B981] text-white font-black'
+                        : d.isWeekend
+                        ? 'bg-slate-800/80 text-amber-300'
+                        : 'text-slate-200'
+                    }`}
+                  >
+                    <div className="text-[10px] uppercase font-semibold opacity-80">{d.dayOfWeek}</div>
+                    <div className="text-xs font-black">{d.day}</div>
+                  </th>
+                ))}
+
+                {/* Right Summary Columns */}
+                <th className="py-3 px-2 text-center font-extrabold min-w-[65px] bg-emerald-950 text-emerald-300 border-r border-slate-800">
+                  Có mặt
+                </th>
+                <th className="py-3 px-2 text-center font-extrabold min-w-[65px] bg-amber-950 text-amber-300 border-r border-slate-800">
+                  Phép
+                </th>
+                <th className="py-3 px-2 text-center font-extrabold min-w-[65px] bg-slate-800 text-slate-200">
+                  Còn lại
+                </th>
+              </tr>
+
+              {/* Row 2: TỔNG ĐĂNG KÝ THEO NGÀY (Prominent Count Row) */}
+              <tr className="bg-emerald-50/90 text-emerald-950 border-b-2 border-emerald-300 font-bold">
+                <td className="sticky left-0 z-20 bg-emerald-100 py-2.5 px-3 text-center border-r border-emerald-200">
+                  ⚡
+                </td>
+                <td className="sticky left-12 z-20 bg-emerald-100 py-2.5 px-4 font-black uppercase text-[11px] tracking-wider text-emerald-900 border-r border-emerald-200">
+                  TỔNG ĐĂNG KÝ HỌC
+                </td>
+                <td className="py-2.5 px-2 text-center text-[11px] text-emerald-800 border-r border-emerald-200">
+                  {filteredStudents.length} HV lọc
+                </td>
+                <td className="py-2.5 px-2 text-center text-[11px] text-emerald-800 border-r border-emerald-200">
+                  —
+                </td>
+                <td className="py-2.5 px-2 text-center text-xs font-black text-emerald-900 border-r border-emerald-200">
+                  {filteredStudents.reduce((acc, s) => acc + (s.specificDates?.length || s.packageSessions || 12), 0)}
+                </td>
+
+                {/* Day Counts */}
+                {daysInMonth.map(d => {
+                  const count = dayRegistrationCounts[d.dateStr] || 0;
+                  return (
+                    <td
+                      key={d.day}
+                      className={`py-2 px-1 text-center font-black text-xs border-r border-emerald-200 ${
+                        d.isToday
+                          ? 'bg-emerald-200 text-emerald-950 font-black'
+                          : count > 0
+                          ? 'bg-emerald-100/70 text-emerald-900'
+                          : 'text-slate-300'
+                      }`}
+                      title={`Ngày ${d.day}/${monthNum}: ${count} học viên đăng ký`}
+                    >
+                      {count > 0 ? count : '—'}
+                    </td>
+                  );
+                })}
+
+                {/* Total Stats Across Filtered */}
+                <td className="py-2.5 px-2 text-center font-black text-xs bg-emerald-100 text-emerald-900 border-r border-emerald-200">
+                  {filteredStudents.reduce((acc, s) => acc + (s.attendedSessions || 0), 0)}
+                </td>
+                <td className="py-2.5 px-2 text-center font-black text-xs bg-amber-100 text-amber-900 border-r border-emerald-200">
+                  {filteredStudents.reduce((acc, s) => acc + (s.usedLeaves || 0), 0)}
+                </td>
+                <td className="py-2.5 px-2 text-center font-black text-xs bg-slate-100 text-slate-800">
+                  {filteredStudents.reduce((acc, s) => acc + (s.remainingSessions || 0), 0)}
+                </td>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+              {filteredStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={daysInMonth.length + 8} className="py-12 text-center text-slate-400">
+                    Không tìm thấy học viên nào phù hợp bộ lọc.
+                  </td>
+                </tr>
+              ) : (
+                filteredStudents.map((st, idx) => {
+                  const isPending = st.scheduleStatus === 'pending_admin';
+
+                  return (
+                    <tr
+                      key={st.id}
+                      className={`hover:bg-slate-50/70 transition-colors ${
+                        isPending ? 'bg-amber-50/30' : ''
+                      }`}
+                    >
+                      {/* STT */}
+                      <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 py-2.5 px-3 text-center text-slate-400 font-semibold border-r border-slate-100">
+                        {idx + 1}
+                      </td>
+
+                      {/* Student Info */}
+                      <td className="sticky left-12 z-10 bg-white group-hover:bg-slate-50 py-2.5 px-4 border-r border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={st.avatar}
+                            alt={st.name}
+                            className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-extrabold text-[#0F172A] truncate flex items-center gap-1.5">
+                              <span>{st.name}</span>
+                              {isPending && (
+                                <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                                  Chờ duyệt
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                              <span className="font-bold text-slate-600">{st.code}</span>
+                              <span>•</span>
+                              <span className="truncate">{st.className}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Sân Cầu Lông */}
+                      <td className="py-2.5 px-2 text-center text-[11px] font-semibold text-slate-700 border-r border-slate-100 truncate max-w-[120px]">
+                        {st.facilityName || 'Sân Cầu Giấy'}
+                      </td>
+
+                      {/* Ca Học */}
+                      <td className="py-2.5 px-2 text-center text-[11px] font-bold text-[#10B981] border-r border-slate-100">
+                        {st.shiftName?.split(' ')[0] || 'Ca 4'}
+                      </td>
+
+                      {/* Đã chọn */}
+                      <td className="py-2.5 px-2 text-center text-xs font-black text-slate-800 border-r border-slate-100">
+                        {st.specificDates?.length || st.packageSessions || 12}
+                      </td>
+
+                      {/* 31 Date Cells */}
+                      {daysInMonth.map(d => {
+                        const status = getAttendanceForStudentDate(st.id, d.dateStr);
+                        const isScheduled = st.specificDates?.includes(d.dateStr);
+
+                        return (
+                          <td
+                            key={d.day}
+                            onClick={() => handleCellClick(st.id, st.name, d.dateStr)}
+                            className={`py-1.5 px-0.5 text-center border-r border-slate-100 transition-all select-none cursor-pointer ${
+                              d.isToday ? 'bg-emerald-50/40' : ''
+                            } ${
+                              status === 'Present'
+                                ? 'bg-emerald-100/90 text-emerald-800 font-black'
+                                : status === 'Excused'
+                                ? 'bg-amber-100/90 text-amber-900 font-black'
+                                : status === 'Absent'
+                                ? 'bg-rose-100/90 text-rose-800 font-black'
+                                : isScheduled
+                                ? 'hover:bg-emerald-50'
+                                : 'hover:bg-slate-100/60'
+                            }`}
+                            title={`${st.name} — Ngày ${d.day}/${monthNum}: ${
+                              status === 'Present'
+                                ? 'Có mặt'
+                                : status === 'Excused'
+                                ? 'Nghỉ phép'
+                                : status === 'Absent'
+                                ? 'Vắng'
+                                : isScheduled
+                                ? isPending
+                                  ? 'Đã chọn ngày (Chờ Admin duyệt)'
+                                  : 'Lịch học đã lưu (Click để đổi điểm danh)'
+                                : 'Không có lịch'
+                            }`}
+                          >
+                            <div className="flex items-center justify-center min-h-[24px]">
+                              {status === 'Present' && (
+                                <span className="text-xs font-black text-emerald-700">✓</span>
+                              )}
+                              {status === 'Excused' && (
+                                <span className="text-xs font-black text-amber-800">P</span>
+                              )}
+                              {status === 'Absent' && (
+                                <span className="text-xs font-black text-rose-700">K</span>
+                              )}
+                              {status === 'Scheduled' && (
+                                <span
+                                  className={`w-2.5 h-2.5 rounded-full ${
+                                    isPending
+                                      ? 'bg-amber-400 border border-amber-500'
+                                      : 'bg-[#10B981] shadow-2xs'
+                                  }`}
+                                ></span>
+                              )}
+                              {status === 'None' && !isScheduled && (
+                                <span className="text-slate-200 text-[10px]">·</span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+
+                      {/* Right Summary Columns */}
+                      <td className="py-2.5 px-2 text-center text-xs font-black text-emerald-700 bg-emerald-50/30 border-r border-slate-100">
+                        {st.attendedSessions}
+                      </td>
+                      <td className="py-2.5 px-2 text-center text-xs font-black text-amber-700 bg-amber-50/30 border-r border-slate-100">
+                        {st.usedLeaves || 0}
+                      </td>
+                      <td className="py-2.5 px-2 text-center text-xs font-black text-[#0F172A] bg-slate-50/30">
+                        {st.remainingSessions}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Legend Footnotes */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600">
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="font-bold text-slate-700">Chú thích ký hiệu:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded bg-emerald-100 text-emerald-800 font-black flex items-center justify-center text-[11px]">
+                ✓
+              </span>
+              <span>Có mặt (Present)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded bg-amber-100 text-amber-900 font-black flex items-center justify-center text-[11px]">
+                P
+              </span>
+              <span>Nghỉ có phép (Excused)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded bg-rose-100 text-rose-800 font-black flex items-center justify-center text-[11px]">
+                K
+              </span>
+              <span>Vắng không phép (Absent)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]"></span>
+              <span>Lịch học đã được Admin lưu</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 border border-amber-500"></span>
+              <span>Chờ Admin duyệt lịch</span>
+            </div>
+          </div>
+
+          <div className="text-slate-400 text-[11px] italic">
+            💡 Mẹo: Nhấp chuột vào bất kỳ ô ngày nào để chuyển đổi nhanh trạng thái: Có mặt → Phép → Vắng.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

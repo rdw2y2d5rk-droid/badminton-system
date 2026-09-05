@@ -154,6 +154,8 @@ export interface Student {
   attendanceHistory?: StudentAttendanceHistoryItem[];
 }
 
+export type Enrollment = Student;
+
 export interface Coach {
   id: string;
   code: string; // "HLV001"
