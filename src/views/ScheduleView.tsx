@@ -18,9 +18,8 @@ import {
   BellRing
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { LevelBadge, SessionStatusBadge } from '../components/common/Badge';
+import { SessionStatusBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
-import { SkillLevel } from '../types';
 
 export const ScheduleView: React.FC = () => {
   const {
@@ -47,7 +46,6 @@ export const ScheduleView: React.FC = () => {
   const [selectedFacility, setSelectedFacility] = useState('ALL');
   const [selectedCoach, setSelectedCoach] = useState('ALL');
   const [selectedShift, setSelectedShift] = useState('ALL');
-  const [selectedLevel, setSelectedLevel] = useState('ALL');
 
   // Coach view mode: My sessions vs All sessions
   const [coachScope, setCoachScope] = useState<'my_sessions' | 'all_sessions'>('my_sessions');
@@ -101,9 +99,8 @@ export const ScheduleView: React.FC = () => {
       session.facilityName === facilities.find(f => f.id === selectedFacility)?.name;
     const matchesCoach = selectedCoach === 'ALL' || session.coachId === selectedCoach;
     const matchesShift = selectedShift === 'ALL' || session.shiftId === selectedShift;
-    const matchesLevel = selectedLevel === 'ALL' || session.level === selectedLevel;
 
-    return matchesFacility && matchesCoach && matchesShift && matchesLevel;
+    return matchesFacility && matchesCoach && matchesShift;
   });
 
   const handleStartAttendance = (classId: string, date: string, sessionId: string) => {
@@ -417,7 +414,7 @@ export const ScheduleView: React.FC = () => {
         </div>
       )}
 
-      {/* Toolbar Filters: Facility (Sân Cầu Lông), Shift, Coach, Level */}
+      {/* Toolbar Filters: Facility (Sân Cầu Lông), Shift, Coach */}
       <div className="p-4 bg-white rounded-2xl border border-slate-100 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-bold text-[#0F172A]">
           <div className="p-1.5 rounded-lg bg-emerald-50 text-[#10B981]">
@@ -471,19 +468,6 @@ export const ScheduleView: React.FC = () => {
               </option>
             ))}
           </select>
-
-          {/* Level Filter */}
-          <select
-            value={selectedLevel}
-            onChange={e => setSelectedLevel(e.target.value)}
-            aria-label="Lọc theo trình độ"
-            className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
-          >
-            <option value="ALL">Tất cả trình độ</option>
-            <option value="Beginner">Cơ bản</option>
-            <option value="Intermediate">Trung cấp</option>
-            <option value="Advanced">Nâng cao</option>
-          </select>
         </div>
       </div>
 
@@ -532,13 +516,7 @@ export const ScheduleView: React.FC = () => {
                           <div
                             key={session.id}
                             onClick={() => navigate('classes', session.classId)}
-                            className={`p-3 rounded-2xl border transition-all cursor-pointer shadow-2xs hover:shadow-md space-y-2 group relative ${
-                              session.level === 'Beginner'
-                                ? 'bg-emerald-50/90 border-emerald-200/90 hover:border-[#10B981]'
-                                : session.level === 'Intermediate'
-                                ? 'bg-sky-50/90 border-sky-200/90 hover:border-sky-400'
-                                : 'bg-amber-50/90 border-amber-200/90 hover:border-amber-400'
-                            }`}
+                            className="p-3 rounded-2xl border border-emerald-200/90 bg-emerald-50/90 hover:border-[#10B981] transition-all cursor-pointer shadow-2xs hover:shadow-md space-y-2 group relative"
                           >
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-white/90 text-slate-800 shadow-2xs">
@@ -623,7 +601,6 @@ export const ScheduleView: React.FC = () => {
                   <th className="py-3.5 px-4">Thời gian</th>
                   <th className="py-3.5 px-4">Sân cầu lông</th>
                   <th className="py-3.5 px-4">Lớp học</th>
-                  <th className="py-3.5 px-4">Trình độ</th>
                   <th className="py-3.5 px-4">HLV phụ trách</th>
                   <th className="py-3.5 px-4">Học viên</th>
                   <th className="py-3.5 px-4">Điểm danh</th>
@@ -649,9 +626,6 @@ export const ScheduleView: React.FC = () => {
                           </span>
                         )}
                       </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <LevelBadge level={s.level} />
                     </td>
                     <td className="py-3.5 px-4 text-xs text-slate-700">{s.coachName}</td>
                     <td className="py-3.5 px-4 text-xs font-bold text-[#0F172A]">
@@ -771,7 +745,7 @@ export const ScheduleView: React.FC = () => {
               >
                 {classes.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.levelLabel})
+                    {c.name}
                   </option>
                 ))}
               </select>
@@ -891,7 +865,7 @@ export const ScheduleView: React.FC = () => {
             >
               {classes.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.levelLabel})
+                  {c.name}
                 </option>
               ))}
             </select>

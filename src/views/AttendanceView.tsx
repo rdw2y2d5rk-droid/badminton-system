@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AttendanceStatus, CoachAttendanceRecord } from '../types';
-import { LevelBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { MonthlyAttendanceMatrix } from '../components/attendance/MonthlyAttendanceMatrix';
 
@@ -294,7 +293,7 @@ export const AttendanceView: React.FC = () => {
             >
               {availableClasses.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.levelLabel} - {c.court})
+                  {c.name} ({c.court})
                 </option>
               ))}
             </select>

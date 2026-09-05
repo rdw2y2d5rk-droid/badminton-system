@@ -14,7 +14,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { LevelBadge, PaymentBadge, SessionStatusBadge, StudentStatusBadge } from '../components/common/Badge';
+import { PaymentBadge, SessionStatusBadge, StudentStatusBadge } from '../components/common/Badge';
 import { SessionProgressBar } from '../components/common/ProgressBar';
 
 interface ClassDetailViewProps {
@@ -80,7 +80,6 @@ export const ClassDetailView: React.FC<ClassDetailViewProps> = ({ classId, onBac
               <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
                 {currentClass.name}
               </h1>
-              <LevelBadge level={currentClass.level} size="md" />
               <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
                 {currentClass.status === 'Active' ? 'Đang hoạt động' : 'Sắp mở'}
               </span>
@@ -169,8 +168,8 @@ export const ClassDetailView: React.FC<ClassDetailViewProps> = ({ classId, onBac
             <div className="p-6 bg-white rounded-3xl border border-slate-100 shadow-xs space-y-4">
               <h3 className="text-base font-bold text-[#0F172A]">Giới Thiệu & Mục Tiêu Khóa Học</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Khóa học {currentClass.name} dành cho học viên trình độ {currentClass.levelLabel}.
-                Chương trình chuẩn hóa kỹ thuật cơ bản gồm 6 góc di chuyển, tư thế ve cầu, phông cầu sâu cuối sân
+                Khóa học {currentClass.name} rèn luyện kỹ thuật và thể lực cầu lông bài bản.
+                Chương trình chuẩn hóa kỹ thuật gồm bộ chân di chuyển các góc sân, tư thế ve cầu, phông cầu sâu cuối sân
                 và cảm giác cầu trên lưới.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">

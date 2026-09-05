@@ -13,9 +13,7 @@ import {
   CheckSquare
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { LevelBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
-import { SkillLevel } from '../types';
 
 export const ClassesView: React.FC = () => {
   const {
@@ -31,13 +29,11 @@ export const ClassesView: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCoach, setSelectedCoach] = useState('ALL');
-  const [selectedLevel, setSelectedLevel] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // New class form state
   const [newClassName, setNewClassName] = useState('');
-  const [newClassLevel, setNewClassLevel] = useState<SkillLevel>('Beginner');
   const [newClassCoachId, setNewClassCoachId] = useState('HLV001');
   const [newClassScheduleDays, setNewClassScheduleDays] = useState(['T2', 'T4', 'T6']);
   const [newClassTimeSlot, setNewClassTimeSlot] = useState('18:00 - 19:30');
@@ -56,10 +52,9 @@ export const ClassesView: React.FC = () => {
       cls.court.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCoach = selectedCoach === 'ALL' || cls.coachId === selectedCoach;
-    const matchesLevel = selectedLevel === 'ALL' || cls.level === selectedLevel;
     const matchesStatus = selectedStatus === 'ALL' || cls.status === selectedStatus;
 
-    return matchesSearch && matchesCoach && matchesLevel && matchesStatus;
+    return matchesSearch && matchesCoach && matchesStatus;
   });
 
   const handleCreateClass = (e: React.FormEvent) => {
@@ -68,16 +63,11 @@ export const ClassesView: React.FC = () => {
 
     const coachObj = coaches.find(c => c.id === newClassCoachId);
     const targetFac = facilities.find(f => f.name === newClassCourt) || facilities[0];
-    const levelLabelMap: Record<SkillLevel, string> = {
-      Beginner: 'Cơ bản',
-      Intermediate: 'Trung cấp',
-      Advanced: 'Nâng cao'
-    };
 
     addClass({
       name: newClassName,
-      level: newClassLevel,
-      levelLabel: levelLabelMap[newClassLevel],
+      level: 'Beginner',
+      levelLabel: '',
       coachId: newClassCoachId,
       coachName: coachObj ? coachObj.name : 'Nguyễn Minh Anh',
       coachAvatar: coachObj?.avatar,
@@ -164,18 +154,6 @@ export const ClassesView: React.FC = () => {
           )}
 
           <select
-            value={selectedLevel}
-            onChange={e => setSelectedLevel(e.target.value)}
-            aria-label="Lọc theo trình độ"
-            className="px-3 py-2 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
-          >
-            <option value="ALL">Tất cả trình độ</option>
-            <option value="Beginner">Cơ bản (Beginner)</option>
-            <option value="Intermediate">Trung cấp (Intermediate)</option>
-            <option value="Advanced">Nâng cao (Advanced)</option>
-          </select>
-
-          <select
             value={selectedStatus}
             onChange={e => setSelectedStatus(e.target.value)}
             aria-label="Lọc theo trạng thái"
@@ -197,7 +175,6 @@ export const ClassesView: React.FC = () => {
               <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="py-3.5 px-5">Mã lớp</th>
                 <th className="py-3.5 px-4">Tên lớp</th>
-                <th className="py-3.5 px-4">Trình độ</th>
                 <th className="py-3.5 px-4">Huấn luyện viên</th>
                 <th className="py-3.5 px-4">Lịch học & Giờ</th>
                 <th className="py-3.5 px-4">Sân</th>
@@ -209,7 +186,7 @@ export const ClassesView: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-sm">
               {filteredClasses.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     Không tìm thấy lớp học nào phù hợp với bộ lọc.
                   </td>
                 </tr>
@@ -227,9 +204,6 @@ export const ClassesView: React.FC = () => {
                     </td>
                     <td className="py-4 px-4 font-bold text-[#0F172A] group-hover:text-[#10B981] transition-colors">
                       {cls.name}
-                    </td>
-                    <td className="py-4 px-4">
-                      <LevelBadge level={cls.level} />
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-2">
@@ -320,7 +294,6 @@ export const ClassesView: React.FC = () => {
                 </div>
                 <div className="text-xs text-slate-500 mt-1">HLV: {cls.coachName}</div>
               </div>
-              <LevelBadge level={cls.level} />
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl">
@@ -373,19 +346,6 @@ export const ClassesView: React.FC = () => {
                 placeholder="VD: Beginner 03, Smash Pro..."
                 className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Trình độ *</label>
-              <select
-                value={newClassLevel}
-                onChange={e => setNewClassLevel(e.target.value as SkillLevel)}
-                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
-              >
-                <option value="Beginner">Cơ bản (Beginner)</option>
-                <option value="Intermediate">Trung cấp (Intermediate)</option>
-                <option value="Advanced">Nâng cao (Advanced)</option>
-              </select>
             </div>
 
             <div>

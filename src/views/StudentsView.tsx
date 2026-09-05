@@ -790,7 +790,7 @@ export const StudentsView: React.FC = () => {
               >
                 {classes.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.levelLabel})
+                    {c.name}
                   </option>
                 ))}
               </select>

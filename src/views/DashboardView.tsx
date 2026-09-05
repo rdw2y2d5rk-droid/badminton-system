@@ -17,7 +17,7 @@ import {
   CheckSquare
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { LevelBadge, SessionStatusBadge } from '../components/common/Badge';
+import { SessionStatusBadge } from '../components/common/Badge';
 
 export const DashboardView: React.FC = () => {
   const {
@@ -195,7 +195,6 @@ export const DashboardView: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-sm font-bold text-[#0F172A]">{session.className}</h3>
-                          <LevelBadge level={session.level} />
                         </div>
                         <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
                           <span className="font-medium text-slate-700">🏟️ {session.court}</span>
@@ -436,7 +435,6 @@ export const DashboardView: React.FC = () => {
                         >
                           {session.className}
                         </h4>
-                        <LevelBadge level={session.level} />
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
                         <span>👤 HLV: {session.coachName}</span>
