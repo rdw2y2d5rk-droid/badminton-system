@@ -20,8 +20,8 @@ export interface Facility {
   id: string; // e.g. "SAN01" hoặc "CS01"
   code: string; // "SAN-CG"
   name: string; // "Sân Cầu Lông Cầu Giấy"
-  address: string; // "Số 12 Dịch Vọng Hậu, Cầu Giấy, Hà Nội"
-  phone: string;
+  address?: string;
+  phone?: string;
   managerId?: string;
   managerName?: string;
   openHours: string; // "06:00 - 22:30"

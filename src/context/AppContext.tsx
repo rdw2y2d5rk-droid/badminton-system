@@ -297,17 +297,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       code: newCode
     };
     setFacilities(prev => [...prev, newFacility]);
-    showToast(`Đã thêm cơ sở mới: ${newFacility.name}`, 'success');
+    showToast(`Đã thêm sân mới: ${newFacility.name}`, 'success');
   };
 
   const editFacility = (id: string, updates: Partial<Facility>) => {
     setFacilities(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
-    showToast('Đã cập nhật thông tin cơ sở!', 'success');
+    showToast('Đã cập nhật thông tin sân!', 'success');
   };
 
   const deleteFacility = (id: string) => {
     setFacilities(prev => prev.filter(f => f.id !== id));
-    showToast('Đã xoá cơ sở khỏi hệ thống!', 'info');
+    showToast('Đã xoá sân khỏi hệ thống!', 'info');
   };
 
   // Court CRUD

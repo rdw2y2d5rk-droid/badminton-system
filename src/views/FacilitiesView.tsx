@@ -4,7 +4,6 @@ import {
   Plus,
   Edit2,
   Trash2,
-  MapPin,
   Users,
   Search,
   UserCheck,
@@ -37,7 +36,6 @@ export const FacilitiesView: React.FC = () => {
 
   // Form State
   const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [managerName, setManagerName] = useState('');
   const [openHours, setOpenHours] = useState('06:00 - 22:30');
@@ -49,7 +47,6 @@ export const FacilitiesView: React.FC = () => {
   const openAddModal = () => {
     setEditingFacility(null);
     setName('');
-    setAddress('');
     setPhone('');
     setManagerName('');
     setOpenHours('06:00 - 22:30');
@@ -63,8 +60,7 @@ export const FacilitiesView: React.FC = () => {
   const openEditModal = (f: Facility) => {
     setEditingFacility(f);
     setName(f.name);
-    setAddress(f.address);
-    setPhone(f.phone);
+    setPhone(f.phone || '');
     setManagerName(f.managerName || '');
     setOpenHours(f.openHours);
     setSurface(f.surface || 'Thảm PVC Yonex 5.0mm BWF');
@@ -76,12 +72,11 @@ export const FacilitiesView: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !address.trim()) return;
+    if (!name.trim()) return;
 
     if (editingFacility) {
       editFacility(editingFacility.id, {
         name: name.trim(),
-        address: address.trim(),
         phone: phone.trim(),
         managerName: managerName.trim(),
         openHours: openHours.trim(),
@@ -93,7 +88,6 @@ export const FacilitiesView: React.FC = () => {
     } else {
       addFacility({
         name: name.trim(),
-        address: address.trim(),
         phone: phone.trim(),
         managerName: managerName.trim(),
         openHours: openHours.trim(),
@@ -111,7 +105,6 @@ export const FacilitiesView: React.FC = () => {
   const filteredFacilities = facilities.filter(f => {
     const matchesSearch =
       f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       f.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (f.managerName && f.managerName.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -222,7 +215,7 @@ export const FacilitiesView: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Tìm tên sân, địa chỉ, quản lý..."
+            placeholder="Tìm tên sân, người quản lý..."
             className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-[#10B981]"
           />
         </div>
@@ -258,10 +251,6 @@ export const FacilitiesView: React.FC = () => {
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
                         {facility.code}
                       </span>
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1 flex items-start gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                      <span>{facility.address}</span>
                     </div>
                   </div>
 
@@ -391,18 +380,6 @@ export const FacilitiesView: React.FC = () => {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Địa chỉ cụ thể *</label>
-            <input
-              type="text"
-              required
-              value={address}
-              onChange={e => setAddress(e.target.value)}
-              placeholder="VD: Số 35 Trần Quý Kiên, Cầu Giấy, Hà Nội"
-              className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#10B981]"
-            />
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Hotline / SĐT *</label>
@@ -513,10 +490,6 @@ export const FacilitiesView: React.FC = () => {
         >
           <div className="space-y-4">
             <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div>
-                <span className="text-slate-400 block font-semibold">Địa chỉ:</span>
-                <span className="font-bold text-[#0F172A]">{viewDetailFacility.address}</span>
-              </div>
               <div>
                 <span className="text-slate-400 block font-semibold">Hotline:</span>
                 <span className="font-bold text-[#0F172A]">{viewDetailFacility.phone}</span>

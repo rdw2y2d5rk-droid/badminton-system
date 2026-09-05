@@ -568,7 +568,7 @@ export const ScheduleView: React.FC = () => {
             >
               {facilities.map(f => (
                 <option key={f.id} value={f.id}>
-                  {f.name} ({f.address})
+                  {f.name}
                 </option>
               ))}
             </select>
