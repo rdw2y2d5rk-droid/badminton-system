@@ -185,11 +185,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
                 {currentUser.name}
               </div>
               <span className="text-xs text-slate-400 font-medium">
-                {currentUser.role === 'ADMIN' ? 'Quản lý sân' : 'Huấn luyện viên'}
+                {currentUser.role === 'ADMIN'
+                  ? 'Quản trị hệ thống'
+                  : currentUser.role === 'FACILITY_MANAGER'
+                  ? (currentUser.facilityName || 'Quản lý cơ sở')
+                  : 'Huấn luyện viên'}
               </span>
             </div>
             <div className="w-10 h-10 bg-[#A3E635] rounded-full flex items-center justify-center border-2 border-white shadow-xs font-bold text-[#0F172A] text-sm shrink-0">
-              {currentUser.role === 'ADMIN' ? 'AD' : 'CO'}
+              {currentUser.role === 'ADMIN' ? 'AD' : currentUser.role === 'FACILITY_MANAGER' ? 'QL' : 'CO'}
             </div>
           </button>
 
@@ -198,7 +202,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
             <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-3 py-2 border-b border-slate-100 mb-1">
                 <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Chuyển đổi vai trò</div>
-                <div className="text-xs text-slate-600 mt-0.5">Góc nhìn Admin hoặc Huấn luyện viên</div>
+                <div className="text-xs text-slate-600 mt-0.5">Admin, Quản lý cơ sở hoặc Huấn luyện viên</div>
               </div>
 
               <div className="space-y-1">
@@ -216,7 +220,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
                       }`}
                     >
                       <div className="w-8 h-8 rounded-full bg-[#A3E635] text-[#0F172A] font-bold text-xs flex items-center justify-center">
-                        {user.role === 'ADMIN' ? 'AD' : 'CO'}
+                        {user.role === 'ADMIN' ? 'AD' : user.role === 'FACILITY_MANAGER' ? 'QL' : 'CO'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-bold truncate flex items-center justify-between">
@@ -224,6 +228,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
                           {user.role === 'ADMIN' ? (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-900 text-white rounded">
                               ADMIN
+                            </span>
+                          ) : user.role === 'FACILITY_MANAGER' ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">
+                              QL SÂN
                             </span>
                           ) : (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">

@@ -14,7 +14,9 @@ import {
   Flame,
   ChevronRight,
   Search,
-  Bell
+  Bell,
+  MapPin,
+  Clock
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { INITIAL_USERS } from '../../data/mockData';
@@ -67,7 +69,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
           </div>
           <span className="font-bold text-base tracking-tight italic">SMASH PRO</span>
           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-[#A3E635] border border-slate-700">
-            {currentUser.role === 'ADMIN' ? 'Admin' : 'HLV'}
+            {currentUser.role === 'ADMIN' ? 'Admin' : currentUser.role === 'FACILITY_MANAGER' ? 'QL Sân' : 'HLV'}
           </span>
         </div>
 
@@ -114,12 +116,16 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-[#A3E635] text-[#0F172A] font-bold text-xs flex items-center justify-center">
-                  {currentUser.role === 'ADMIN' ? 'AD' : 'CO'}
+                  {currentUser.role === 'ADMIN' ? 'AD' : currentUser.role === 'FACILITY_MANAGER' ? 'QL' : 'CO'}
                 </div>
                 <div>
                   <div className="font-bold text-sm text-white">{currentUser.name}</div>
                   <div className="text-xs text-[#10B981] font-medium">
-                    {currentUser.role === 'ADMIN' ? 'Admin Center' : 'Huấn Luyện Viên'}
+                    {currentUser.role === 'ADMIN'
+                      ? 'Admin Center'
+                      : currentUser.role === 'FACILITY_MANAGER'
+                      ? (currentUser.facilityName || 'Quản lý cơ sở')
+                      : 'Huấn Luyện Viên'}
                   </div>
                 </div>
               </div>
@@ -152,7 +158,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
                   >
                     <span>{user.name}</span>
                     <span className="text-[10px] opacity-80 font-semibold">
-                      {user.role === 'ADMIN' ? 'Admin' : 'HLV'}
+                      {user.role === 'ADMIN' ? 'Admin' : user.role === 'FACILITY_MANAGER' ? 'QL Sân' : 'HLV'}
                     </span>
                   </button>
                 ))}
@@ -163,6 +169,12 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
             <nav className="flex-1 overflow-y-auto space-y-1">
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+                ...(currentUser.role === 'ADMIN' || currentUser.role === 'FACILITY_MANAGER'
+                  ? [
+                      { id: 'facilities', label: 'Cơ sở & Sân', icon: MapPin },
+                      { id: 'shifts', label: 'Ca học', icon: Clock }
+                    ]
+                  : []),
                 { id: 'classes', label: 'Lớp học', icon: BookOpen },
                 { id: 'students', label: 'Học viên', icon: User },
                 ...(currentUser.role === 'ADMIN'
@@ -170,11 +182,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
                   : []),
                 { id: 'schedule', label: 'Lịch học', icon: Calendar },
                 { id: 'attendance', label: 'Điểm danh', icon: CheckSquare },
+                ...(currentUser.role === 'ADMIN' || currentUser.role === 'FACILITY_MANAGER'
+                  ? [{ id: 'payments', label: 'Học phí & Thu ngân', icon: CreditCard }]
+                  : []),
                 ...(currentUser.role === 'ADMIN'
-                  ? [
-                      { id: 'payments', label: 'Học phí', icon: CreditCard },
-                      { id: 'reports', label: 'Thống kê', icon: BarChart3 }
-                    ]
+                  ? [{ id: 'reports', label: 'Thống kê', icon: BarChart3 }]
                   : []),
                 { id: 'settings', label: 'Cài đặt', icon: Settings }
               ].map(item => {

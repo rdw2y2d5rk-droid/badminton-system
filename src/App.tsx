@@ -18,6 +18,8 @@ import { AttendanceView } from './views/AttendanceView';
 import { PaymentsView } from './views/PaymentsView';
 import { ReportsView } from './views/ReportsView';
 import { SettingsView } from './views/SettingsView';
+import { FacilitiesView } from './views/FacilitiesView';
+import { ShiftsView } from './views/ShiftsView';
 
 const MainContent: React.FC = () => {
   const { activeTab, selectedId, navigate } = useApp();
@@ -60,6 +62,10 @@ const MainContent: React.FC = () => {
         return <StudentsView />;
       case 'coaches':
         return <CoachesView />;
+      case 'facilities':
+        return <FacilitiesView />;
+      case 'shifts':
+        return <ShiftsView />;
       case 'schedule':
         return <ScheduleView />;
       case 'attendance':

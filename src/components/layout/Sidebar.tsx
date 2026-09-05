@@ -11,7 +11,9 @@ import {
   Settings,
   Flame,
   Award,
-  Zap
+  Zap,
+  MapPin,
+  Clock
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -47,21 +49,35 @@ export const Sidebar: React.FC = () => {
       id: 'dashboard',
       label: 'Dashboard',
       icon: LayoutDashboard,
-      roles: ['ADMIN', 'COACH'],
+      roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
+      badge: null
+    },
+    {
+      id: 'facilities',
+      label: 'Cơ sở & Sân',
+      icon: MapPin,
+      roles: ['ADMIN', 'FACILITY_MANAGER'],
+      badge: null
+    },
+    {
+      id: 'shifts',
+      label: 'Ca học',
+      icon: Clock,
+      roles: ['ADMIN', 'FACILITY_MANAGER'],
       badge: null
     },
     {
       id: 'classes',
       label: 'Lớp học',
       icon: BookOpen,
-      roles: ['ADMIN', 'COACH'],
+      roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
       badge: null
     },
     {
       id: 'students',
       label: 'Học viên',
       icon: Users,
-      roles: ['ADMIN', 'COACH'],
+      roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
       badge: warningStudentsCount + expiredStudentsCount > 0 ? (
         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
           {warningStudentsCount + expiredStudentsCount}
@@ -79,14 +95,14 @@ export const Sidebar: React.FC = () => {
       id: 'schedule',
       label: 'Lịch học',
       icon: Calendar,
-      roles: ['ADMIN', 'COACH'],
+      roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
       badge: null
     },
     {
       id: 'attendance',
       label: 'Điểm danh',
       icon: CheckSquare,
-      roles: ['ADMIN', 'COACH'],
+      roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
       badge: pendingAttendanceCount > 0 ? (
         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white animate-pulse">
           {pendingAttendanceCount}
@@ -95,9 +111,9 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: 'payments',
-      label: 'Học phí',
+      label: 'Học phí & Thu ngân',
       icon: CreditCard,
-      roles: ['ADMIN'], // Coach doesn't see revenue
+      roles: ['ADMIN', 'FACILITY_MANAGER'],
       badge: unpaidPaymentsCount > 0 ? (
         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">
           {unpaidPaymentsCount}
@@ -115,7 +131,7 @@ export const Sidebar: React.FC = () => {
       id: 'settings',
       label: 'Cài đặt',
       icon: Settings,
-      roles: ['ADMIN', 'COACH'],
+      roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
       badge: null
     }
   ];
@@ -135,7 +151,11 @@ export const Sidebar: React.FC = () => {
               <span>SMASH PRO</span>
             </div>
             <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
-              {currentUser.role === 'ADMIN' ? 'Admin Center' : 'Coach Portal'}
+              {currentUser.role === 'ADMIN'
+                ? 'Admin Center'
+                : currentUser.role === 'FACILITY_MANAGER'
+                ? 'Facility Portal'
+                : 'Coach Portal'}
             </div>
           </div>
         </div>
@@ -146,13 +166,21 @@ export const Sidebar: React.FC = () => {
         <div className="flex items-center gap-2.5 px-3 py-2 bg-slate-800/80 rounded-xl border border-slate-700/60">
           <div
             className={`w-2.5 h-2.5 rounded-full ${
-              currentUser.role === 'ADMIN' ? 'bg-[#A3E635]' : 'bg-[#10B981]'
+              currentUser.role === 'ADMIN'
+                ? 'bg-[#A3E635]'
+                : currentUser.role === 'FACILITY_MANAGER'
+                ? 'bg-amber-400'
+                : 'bg-[#10B981]'
             }`}
           />
           <div className="flex-1 min-w-0">
             <div className="text-xs font-bold text-white truncate">{currentUser.name}</div>
             <div className="text-[10px] text-slate-400 truncate font-semibold uppercase tracking-wider">
-              {currentUser.role === 'ADMIN' ? 'Cấp Quản Trị' : 'Huấn Luyện Viên'}
+              {currentUser.role === 'ADMIN'
+                ? 'Cấp Quản Trị'
+                : currentUser.role === 'FACILITY_MANAGER'
+                ? 'Quản Lý Cơ Sở'
+                : 'Huấn Luyện Viên'}
             </div>
           </div>
           {isCoach && <Award className="w-3.5 h-3.5 text-[#A3E635] shrink-0" />}
@@ -193,11 +221,15 @@ export const Sidebar: React.FC = () => {
         <div className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-[#A3E635] flex items-center justify-center font-bold text-xs text-[#0F172A] shrink-0">
-              {currentUser.role === 'ADMIN' ? 'AD' : 'CO'}
+              {currentUser.role === 'ADMIN' ? 'AD' : currentUser.role === 'FACILITY_MANAGER' ? 'QL' : 'CO'}
             </div>
             <div className="truncate">
               <div className="text-xs font-bold text-white truncate">{currentUser.name}</div>
-              <div className="text-[10px] text-slate-400 truncate">SmashZone Pro v2.4</div>
+              <div className="text-[10px] text-slate-400 truncate">
+                {currentUser.role === 'FACILITY_MANAGER'
+                  ? currentUser.facilityName || 'Quản lý cơ sở'
+                  : 'SmashZone Pro v2.4'}
+              </div>
             </div>
           </div>
           <button

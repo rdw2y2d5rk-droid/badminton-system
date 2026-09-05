@@ -15,7 +15,11 @@ import {
   ChevronRight,
   Shield,
   Zap,
-  Flame
+  Flame,
+  Building2,
+  RotateCw,
+  CalendarCheck,
+  Sparkles
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AttendanceStatusBadge, PaymentBadge, StudentStatusBadge } from '../components/common/Badge';
@@ -32,6 +36,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
     classes,
     payments,
     addSessionsToStudent,
+    renewStudentMonth,
     confirmPayment,
     isCoach,
     navigate
@@ -40,6 +45,13 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
   const [activeTab, setActiveTab] = useState<'profile' | 'attendance' | 'payments'>('profile');
   const [isAddSessionModalOpen, setIsAddSessionModalOpen] = useState(false);
   const [extraSessionsCount, setExtraSessionsCount] = useState(12);
+
+  // Monthly Renewal Modal State
+  const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+  const [renewMonth, setRenewMonth] = useState('Tháng 09/2026');
+  const [renewStartDate, setRenewStartDate] = useState('2026-09-01');
+  const [renewEndDate, setRenewEndDate] = useState('2026-09-30');
+  const [renewPackageSessions, setRenewPackageSessions] = useState(12);
 
   const currentStudent = students.find(s => s.id === studentId) || students[0];
   const studentPayments = payments.filter(p => p.studentId === currentStudent.id);
@@ -56,6 +68,18 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
       ? Math.round((currentStudent.attendedSessions / currentStudent.packageSessions) * 100)
       : 0;
 
+  const handleConfirmRenew = (e: React.FormEvent) => {
+    e.preventDefault();
+    renewStudentMonth(
+      currentStudent.id,
+      Number(renewPackageSessions),
+      renewMonth,
+      renewStartDate,
+      renewEndDate
+    );
+    setIsRenewModalOpen(false);
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Top Bar */}
@@ -71,11 +95,18 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
         {!isCoach && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsAddSessionModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+              onClick={() => setIsRenewModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>+ Nạp Thêm Buổi Học</span>
+              <RotateCw className="w-4 h-4" />
+              <span>Gia Hạn Tháng Mới (Bảo Lưu)</span>
+            </button>
+            <button
+              onClick={() => setIsAddSessionModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-emerald-600" />
+              <span>Nạp Thêm Buổi</span>
             </button>
           </div>
         )}
@@ -142,7 +173,15 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
             <div className="text-2xl font-extrabold text-[#0F172A] mt-1">
               {currentStudent.packageSessions} Buổi
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Thời hạn 60 ngày</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              {currentStudent.carriedOverSessions && currentStudent.carriedOverSessions > 0 ? (
+                <span className="text-emerald-700 font-bold">
+                  (Bảo lưu +{currentStudent.carriedOverSessions} buổi cũ)
+                </span>
+              ) : (
+                'Kỳ học: ' + (currentStudent.month || 'Tháng 08/2026')
+              )}
+            </div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
@@ -184,6 +223,85 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
               {currentStudent.paymentStatus === 'Paid' ? 'Đã hoàn tất' : 'Chưa thanh toán'}
+            </div>
+          </div>
+        </div>
+
+        {/* Fixed Schedule & Leave Quota Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          {/* Fixed Venue & Shift */}
+          <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold uppercase tracking-wider">
+                <Building2 className="w-4 h-4" />
+                <span>Đăng ký cơ sở & ca học cố định</span>
+              </div>
+              <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-bold">
+                {currentStudent.month || 'Tháng 08/2026'}
+              </span>
+            </div>
+            <div className="mt-3 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Cơ sở & Sân:</span>
+                <span className="font-bold text-white">
+                  {currentStudent.facilityName || 'Cơ sở 1 - Cầu Giấy'} • {currentStudent.courtName || 'Sân 01'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Ca học:</span>
+                <span className="font-bold text-emerald-300">
+                  {currentStudent.fixedShiftName || 'Ca Tối (18:00 - 19:30)'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Ngày cố định trong tuần:</span>
+                <span className="font-extrabold text-amber-300">
+                  {currentStudent.fixedDays && currentStudent.fixedDays.length > 0
+                    ? currentStudent.fixedDays.join(', ')
+                    : 'Thứ 2, Thứ 4, Thứ 6'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Leave Quota (4 sessions = 1 leave) */}
+          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-950 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-amber-900 font-bold uppercase tracking-wider">
+                <Shield className="w-4 h-4 text-amber-600" />
+                <span>Quy luật nghỉ phép (4 buổi = 1 phép)</span>
+              </div>
+              <span className="text-[10px] bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full font-black">
+                Bảo lưu số buổi
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 bg-white/90 rounded-xl border border-amber-200">
+                <div className="text-[10px] text-slate-500 font-semibold uppercase">Được phép</div>
+                <div className="text-base font-black text-amber-900">
+                  {currentStudent.allowedLeaves ?? Math.floor(currentStudent.packageSessions / 4)} buổi
+                </div>
+              </div>
+              <div className="p-2 bg-white/90 rounded-xl border border-amber-200">
+                <div className="text-[10px] text-slate-500 font-semibold uppercase">Đã dùng</div>
+                <div className="text-base font-black text-rose-600">
+                  {currentStudent.usedLeaves || 0} buổi
+                </div>
+              </div>
+              <div className="p-2 bg-white/90 rounded-xl border border-amber-200">
+                <div className="text-[10px] text-slate-500 font-semibold uppercase">Còn lại</div>
+                <div className="text-base font-black text-emerald-600">
+                  {Math.max(
+                    0,
+                    (currentStudent.allowedLeaves ?? Math.floor(currentStudent.packageSessions / 4)) -
+                      (currentStudent.usedLeaves || 0)
+                  )}{' '}
+                  phép
+                </div>
+              </div>
+            </div>
+            <div className="text-[11px] text-amber-800/90 mt-2 font-medium leading-tight">
+              * Nghỉ có phép bảo lưu số buổi không trừ. Toàn bộ buổi thừa sẽ được cộng dồn (bảo lưu) khi gia hạn tháng mới.
             </div>
           </div>
         </div>
@@ -429,6 +547,132 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
               className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs cursor-pointer"
             >
               Xác Nhận Nạp Buổi
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Renew Month Modal */}
+      <Modal
+        isOpen={isRenewModalOpen}
+        onClose={() => setIsRenewModalOpen(false)}
+        title={`Gia Hạn Kỳ Học Mới: ${currentStudent.name}`}
+        subtitle="Tự động bảo lưu số buổi còn lại và cấp lại số ngày nghỉ phép mới theo quy định"
+      >
+        <form onSubmit={handleConfirmRenew} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Kỳ / Tháng mới *
+              </label>
+              <input
+                type="text"
+                value={renewMonth}
+                onChange={e => setRenewMonth(e.target.value)}
+                placeholder="VD: Tháng 09/2026"
+                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Gói buổi học đăng ký kỳ mới *
+              </label>
+              <select
+                value={renewPackageSessions}
+                onChange={e => setRenewPackageSessions(Number(e.target.value))}
+                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold"
+              >
+                <option value={12}>12 buổi (Khoảng 1 tháng - 1.800.000đ)</option>
+                <option value={16}>16 buổi (Khoảng 1.5 tháng - 2.400.000đ)</option>
+                <option value={24}>24 buổi (Khoảng 2 tháng - 3.400.000đ)</option>
+                <option value={36}>36 buổi (Khoảng 3 tháng - 4.800.000đ)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Ngày bắt đầu kỳ mới
+              </label>
+              <input
+                type="date"
+                value={renewStartDate}
+                onChange={e => setRenewStartDate(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Ngày kết thúc kỳ mới
+              </label>
+              <input
+                type="date"
+                value={renewEndDate}
+                onChange={e => setRenewEndDate(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
+              />
+            </div>
+          </div>
+
+          {/* Rollover & Leave Calculation Preview */}
+          <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 space-y-2.5 text-xs">
+            <div className="font-bold text-emerald-950 flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-emerald-600" />
+              <span>Bảng Tính Tự Động Chuyển Giao & Bảo Lưu</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-slate-700">
+              <div className="p-2 bg-white/80 rounded-xl border border-emerald-100">
+                <span className="text-slate-500 block text-[11px]">Buổi cũ chưa dùng (Bảo lưu):</span>
+                <span className="text-sm font-extrabold text-[#0F172A]">
+                  +{currentStudent.remainingSessions} buổi
+                </span>
+              </div>
+              <div className="p-2 bg-white/80 rounded-xl border border-emerald-100">
+                <span className="text-slate-500 block text-[11px]">Buổi gói mới nạp:</span>
+                <span className="text-sm font-extrabold text-emerald-600">
+                  +{renewPackageSessions} buổi
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-emerald-600 text-white rounded-xl flex items-center justify-between">
+              <div>
+                <span className="text-[11px] text-emerald-100 block">Tổng buổi khả dụng kỳ mới:</span>
+                <span className="text-lg font-black tracking-tight">
+                  {currentStudent.remainingSessions + Number(renewPackageSessions)} Buổi Tập
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[11px] text-emerald-100 block">Phép nghỉ mới (4 buổi = 1 phép):</span>
+                <span className="text-base font-black text-amber-300">
+                  {Math.floor(Number(renewPackageSessions) / 4)} Ngày phép
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-emerald-800 italic leading-snug">
+              * Hệ thống sẽ tự động tạo hóa đơn học phí mới ({renewMonth}), đưa trạng thái học phí về &quot;Chưa đóng&quot; và reset số ngày phép đã sử dụng về 0.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsRenewModalOpen(false)}
+              className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
+              <RotateCw className="w-4 h-4" />
+              <span>Xác Nhận Gia Hạn Tháng Mới</span>
             </button>
           </div>
         </form>

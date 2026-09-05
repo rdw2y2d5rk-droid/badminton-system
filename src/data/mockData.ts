@@ -1,4 +1,54 @@
-import { BadmintonClass, Coach, CourtInfo, NotificationItem, PaymentItem, SessionSchedule, Student, UserProfile } from '../types';
+import {
+  BadmintonClass,
+  Coach,
+  CourtInfo,
+  Facility,
+  NotificationItem,
+  PaymentItem,
+  SessionSchedule,
+  ShiftInfo,
+  Student,
+  UserProfile
+} from '../types';
+
+export const INITIAL_FACILITIES: Facility[] = [
+  {
+    id: 'CS01',
+    code: 'CS01',
+    name: 'Cơ sở 1 - Cầu Giấy',
+    address: 'Số 12 Dịch Vọng Hậu, Quận Cầu Giấy, Hà Nội',
+    phone: '0988 123 456',
+    managerId: 'user_manager_1',
+    managerName: 'Hoàng Văn Long',
+    totalCourts: 3,
+    openHours: '06:00 - 22:30',
+    status: 'Active',
+    description: 'Trung tâm huấn luyện tiêu chuẩn 3 sân thảm Yonex/Li-Ning đạt chuẩn BWF.',
+    courtIds: ['SAN01', 'SAN02', 'SAN03']
+  },
+  {
+    id: 'CS02',
+    code: 'CS02',
+    name: 'Cơ sở 2 - Ba Đình',
+    address: 'Số 45 Liễu Giai, Quận Ba Đình, Hà Nội',
+    phone: '0977 654 321',
+    managerId: 'user_manager_2',
+    managerName: 'Vũ Đức Thịnh',
+    totalCourts: 2,
+    openHours: '06:00 - 22:00',
+    status: 'Active',
+    description: 'Cơ sở đào tạo chuyên sâu phong trào và thiếu nhi khu vực Ba Đình.',
+    courtIds: ['SAN04', 'SAN05']
+  }
+];
+
+export const INITIAL_SHIFTS: ShiftInfo[] = [
+  { id: 'CA01', code: 'CA-01', name: 'Ca Sáng 1', startTime: '06:00', endTime: '07:30', timeSlot: '06:00 - 07:30', category: 'Morning', description: 'Ca sáng rèn thể lực & đánh sáng sớm', isActive: true },
+  { id: 'CA02', code: 'CA-02', name: 'Ca Sáng 2', startTime: '08:00', endTime: '09:30', timeSlot: '08:00 - 09:30', category: 'Morning', description: 'Ca sáng chuyên lớp thiếu nhi & tự do', isActive: true },
+  { id: 'CA03', code: 'CA-03', name: 'Ca Chiều', startTime: '16:30', endTime: '18:00', timeSlot: '16:30 - 18:00', category: 'Afternoon', description: 'Ca chiều sau giờ làm & tan trường', isActive: true },
+  { id: 'CA04', code: 'CA-04', name: 'Ca Tối 1', startTime: '18:00', endTime: '19:30', timeSlot: '18:00 - 19:30', category: 'Evening', description: 'Ca tối vàng - Lớp Cơ bản & Nâng cao', isActive: true },
+  { id: 'CA05', code: 'CA-05', name: 'Ca Tối 2', startTime: '19:30', endTime: '21:00', timeSlot: '19:30 - 21:00', category: 'Evening', description: 'Ca tối chiến thuật đánh đôi & nâng cao', isActive: true }
+];
 
 export const INITIAL_USERS: UserProfile[] = [
   {
@@ -9,6 +59,17 @@ export const INITIAL_USERS: UserProfile[] = [
     phone: '0988 123 456',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     title: 'Quản lý Trưởng (Admin)'
+  },
+  {
+    id: 'user_manager_1',
+    name: 'Hoàng Văn Long',
+    role: 'FACILITY_MANAGER',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    email: 'vanlong.manager@smashzone.vn',
+    phone: '0988 555 666',
+    avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80',
+    title: 'Quản lý Cơ sở Cầu Giấy'
   },
   {
     id: 'user_coach_1',
@@ -142,6 +203,9 @@ export const INITIAL_CLASSES: BadmintonClass[] = [
     name: 'Beginner 01',
     level: 'Beginner',
     levelLabel: 'Cơ bản',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA04',
     coachId: 'HLV001',
     coachName: 'Nguyễn Minh Anh',
     coachAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
@@ -164,6 +228,9 @@ export const INITIAL_CLASSES: BadmintonClass[] = [
     name: 'Beginner 02',
     level: 'Beginner',
     levelLabel: 'Cơ bản',
+    facilityId: 'CS02',
+    facilityName: 'Cơ sở 2 - Ba Đình',
+    shiftId: 'CA04',
     coachId: 'HLV004',
     coachName: 'Phạm Đức Long',
     coachAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
@@ -186,6 +253,9 @@ export const INITIAL_CLASSES: BadmintonClass[] = [
     name: 'Intermediate 01',
     level: 'Intermediate',
     levelLabel: 'Trung cấp',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA05',
     coachId: 'HLV001',
     coachName: 'Nguyễn Minh Anh',
     coachAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
@@ -208,6 +278,9 @@ export const INITIAL_CLASSES: BadmintonClass[] = [
     name: 'Intermediate 02',
     level: 'Intermediate',
     levelLabel: 'Trung cấp',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA04',
     coachId: 'HLV002',
     coachName: 'Trần Quốc Huy',
     coachAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
@@ -230,6 +303,9 @@ export const INITIAL_CLASSES: BadmintonClass[] = [
     name: 'Advanced 01',
     level: 'Advanced',
     levelLabel: 'Nâng cao',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA05',
     coachId: 'Lê Hoàng Nam',
     coachName: 'Lê Hoàng Nam',
     coachAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
@@ -252,6 +328,9 @@ export const INITIAL_CLASSES: BadmintonClass[] = [
     name: 'Advanced 02',
     level: 'Advanced',
     levelLabel: 'Nâng cao',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA02',
     coachId: 'HLV002',
     coachName: 'Trần Quốc Huy',
     coachAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
@@ -604,11 +683,11 @@ export const INITIAL_STUDENTS: Student[] = [
 ];
 
 export const INITIAL_COURTS: CourtInfo[] = [
-  { id: 'SAN01', name: 'Sân 01', type: 'VIP', surface: 'Thảm PVC Yonex 5.0mm', status: 'InUse', currentClass: 'Advanced 01', currentCoach: 'Lê Hoàng Nam' },
-  { id: 'SAN02', name: 'Sân 02', type: 'Standard', surface: 'Thảm PVC Li-Ning 4.5mm', status: 'InUse', currentClass: 'Beginner 01', currentCoach: 'Nguyễn Minh Anh' },
-  { id: 'SAN03', name: 'Sân 03', type: 'Standard', surface: 'Thảm PVC Li-Ning 4.5mm', status: 'InUse', currentClass: 'Intermediate 02', currentCoach: 'Trần Quốc Huy' },
-  { id: 'SAN04', name: 'Sân 04', type: 'Standard', surface: 'Thảm PVC Victor 4.5mm', status: 'Available' },
-  { id: 'SAN05', name: 'Sân 05', type: 'Standard', surface: 'Thảm PVC Victor 4.5mm', status: 'Available' },
+  { id: 'SAN01', facilityId: 'CS01', facilityName: 'Cơ sở 1 - Cầu Giấy', name: 'Sân 01', type: 'VIP', surface: 'Thảm PVC Yonex 5.0mm', status: 'InUse', pricePerHour: 180000, currentClass: 'Advanced 01', currentCoach: 'Lê Hoàng Nam' },
+  { id: 'SAN02', facilityId: 'CS01', facilityName: 'Cơ sở 1 - Cầu Giấy', name: 'Sân 02', type: 'Standard', surface: 'Thảm PVC Li-Ning 4.5mm', status: 'InUse', pricePerHour: 150000, currentClass: 'Beginner 01', currentCoach: 'Nguyễn Minh Anh' },
+  { id: 'SAN03', facilityId: 'CS01', facilityName: 'Cơ sở 1 - Cầu Giấy', name: 'Sân 03', type: 'Standard', surface: 'Thảm PVC Li-Ning 4.5mm', status: 'InUse', pricePerHour: 150000, currentClass: 'Intermediate 02', currentCoach: 'Trần Quốc Huy' },
+  { id: 'SAN04', facilityId: 'CS02', facilityName: 'Cơ sở 2 - Ba Đình', name: 'Sân 04', type: 'Standard', surface: 'Thảm PVC Victor 4.5mm', status: 'Available', pricePerHour: 150000 },
+  { id: 'SAN05', facilityId: 'CS02', facilityName: 'Cơ sở 2 - Ba Đình', name: 'Sân 05', type: 'Standard', surface: 'Thảm PVC Victor 4.5mm', status: 'Available', pricePerHour: 150000 },
 ];
 
 export const INITIAL_TODAY_SESSIONS: SessionSchedule[] = [
@@ -617,6 +696,9 @@ export const INITIAL_TODAY_SESSIONS: SessionSchedule[] = [
     classId: 'BD-B01',
     className: 'Beginner 01',
     level: 'Beginner',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA04',
     coachId: 'HLV001',
     coachName: 'Nguyễn Minh Anh',
     coachAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
@@ -629,13 +711,18 @@ export const INITIAL_TODAY_SESSIONS: SessionSchedule[] = [
     status: 'Upcoming',
     attendanceDone: false,
     totalStudents: 12,
-    attendanceRecords: []
+    coachAttendance: { status: 'Present' },
+    attendanceRecords: [],
+    makeupStudents: []
   },
   {
     id: 'SES-2026-0828-02',
     classId: 'BD-I02',
     className: 'Intermediate 02',
     level: 'Intermediate',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA04',
     coachId: 'HLV002',
     coachName: 'Trần Quốc Huy',
     coachAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
@@ -648,13 +735,18 @@ export const INITIAL_TODAY_SESSIONS: SessionSchedule[] = [
     status: 'Upcoming',
     attendanceDone: false,
     totalStudents: 10,
-    attendanceRecords: []
+    coachAttendance: { status: 'Present' },
+    attendanceRecords: [],
+    makeupStudents: []
   },
   {
     id: 'SES-2026-0828-03',
     classId: 'BD-A01',
     className: 'Advanced 01',
     level: 'Advanced',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA05',
     coachId: 'HLV003',
     coachName: 'Lê Hoàng Nam',
     coachAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
@@ -667,13 +759,18 @@ export const INITIAL_TODAY_SESSIONS: SessionSchedule[] = [
     status: 'Upcoming',
     attendanceDone: false,
     totalStudents: 8,
-    attendanceRecords: []
+    coachAttendance: { status: 'Present' },
+    attendanceRecords: [],
+    makeupStudents: []
   },
   {
     id: 'SES-2026-0828-04',
     classId: 'BD-I01',
     className: 'Intermediate 01',
     level: 'Intermediate',
+    facilityId: 'CS01',
+    facilityName: 'Cơ sở 1 - Cầu Giấy',
+    shiftId: 'CA05',
     coachId: 'HLV001',
     coachName: 'Nguyễn Minh Anh',
     coachAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
@@ -686,7 +783,9 @@ export const INITIAL_TODAY_SESSIONS: SessionSchedule[] = [
     status: 'Upcoming',
     attendanceDone: false,
     totalStudents: 10,
-    attendanceRecords: []
+    coachAttendance: { status: 'Present' },
+    attendanceRecords: [],
+    makeupStudents: []
   }
 ];
 
