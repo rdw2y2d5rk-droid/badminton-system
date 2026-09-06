@@ -19,86 +19,58 @@ import {
 import { useApp } from '../context/AppContext';
 import { PaymentBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
+import { PaymentItem } from '../types';
 
 export const PaymentsView: React.FC = () => {
-  const { payments, classes, students, confirmPayment, collectPaymentAtCourt, currentUser, isCoach, navigate } = useApp();
+  const {
+    payments,
+    classes,
+    students,
+    confirmPayment,
+    sessionUnitPrice,
+    setSessionUnitPrice,
+    currentUser,
+    isCoach,
+    navigate
+  } = useApp();
+
+  const canConfirmPayment = currentUser.role === 'ADMIN' || currentUser.role === 'FACILITY_MANAGER';
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('Tháng 08/2026');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedClass, setSelectedClass] = useState('ALL');
-  const [selectedType, setSelectedType] = useState('ALL');
 
-  // Cashier Collection Modal State
-  const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
-  const [collectType, setCollectType] = useState<'Tuition' | 'CourtFee' | 'Equipment' | 'Other'>('Tuition');
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [payerName, setPayerName] = useState('');
-  const [payerPhone, setPayerPhone] = useState('');
-  const [payerClassId, setPayerClassId] = useState(classes[0]?.id || 'BD-B01');
-  const [collectAmount, setCollectAmount] = useState<number>(1800000);
-  const [collectMethod, setCollectMethod] = useState<'Tiền mặt' | 'Chuyển khoản QR' | 'Thẻ ngân hàng' | 'Ví MoMo'>('Chuyển khoản QR');
-  const [collectNote, setCollectNote] = useState('');
+  // Confirmation Modal State (Requires explicit confirm button for Facility Manager & Admin)
+  const [confirmingPayment, setConfirmingPayment] = useState<PaymentItem | null>(null);
 
-  // Handle student selection in modal
-  const handleStudentSelect = (studentId: string) => {
-    setSelectedStudentId(studentId);
-    const st = students.find(s => s.id === studentId);
-    if (st) {
-      setPayerName(st.name);
-      setPayerPhone(st.phone);
-      setPayerClassId(st.classId);
-      const cls = classes.find(c => c.id === st.classId);
-      setCollectAmount(cls?.feePerPackage || 1800000);
-      setCollectNote(`Thu học phí tháng ${st.month || '09/2026'} - Gói ${st.packageSessions || 12} buổi`);
-    }
-  };
+  // Admin Unit Price Configuration Modal
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [tempUnitPrice, setTempUnitPrice] = useState<number>(sessionUnitPrice);
 
-  const handleConfirmCollect = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cls = classes.find(c => c.id === payerClassId);
-    collectPaymentAtCourt({
-      studentId: collectType === 'Tuition' && selectedStudentId ? selectedStudentId : undefined,
-      studentName: payerName || (selectedStudentId ? students.find(s => s.id === selectedStudentId)?.name || 'Khách' : 'Khách vãng lai'),
-      studentPhone: payerPhone || '0988000000',
-      classId: collectType === 'Tuition' ? payerClassId : undefined,
-      className: collectType === 'Tuition' ? cls?.name : undefined,
-      amount: Number(collectAmount),
-      paymentType: collectType,
-      method: collectMethod,
-      note: collectNote || (collectType === 'CourtFee' ? 'Tiền thuê sân' : collectType === 'Equipment' ? 'Cầu & Nước' : 'Học phí')
-    });
+  // Only manage teaching/tuition payments
+  const tuitionPayments = payments.filter(p => p.paymentType === 'Tuition' || !p.paymentType || Boolean(p.studentId));
 
-    setIsCollectModalOpen(false);
-    setSelectedStudentId('');
-    setPayerName('');
-    setPayerPhone('');
-    setCollectAmount(1800000);
-    setCollectNote('');
-  };
-
-  const filteredPayments = payments.filter(p => {
+  const filteredPayments = tuitionPayments.filter(p => {
+    const phone = p.studentPhone || students.find(s => s.id === p.studentId)?.phone || '';
     const matchesSearch =
       p.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.className.toLowerCase().includes(searchQuery.toLowerCase());
+      phone.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = selectedStatus === 'ALL' || p.status === selectedStatus;
     const matchesClass = selectedClass === 'ALL' || p.classId === selectedClass;
-    const matchesType = selectedType === 'ALL' || p.paymentType === selectedType;
 
-    return matchesSearch && matchesStatus && matchesClass && matchesType;
+    return matchesSearch && matchesStatus && matchesClass;
   });
 
-  const totalCollected = payments
+  const totalCollected = tuitionPayments
     .filter(p => p.status === 'Paid')
     .reduce((sum, p) => sum + p.amount, 0);
 
-  const totalUnpaid = payments
+  const totalUnpaid = tuitionPayments
     .filter(p => p.status === 'Unpaid')
     .reduce((sum, p) => sum + p.amount, 0);
 
-  const totalOverdue = payments
+  const totalOverdue = tuitionPayments
     .filter(p => p.status === 'Overdue')
     .reduce((sum, p) => sum + p.amount, 0);
 
@@ -116,13 +88,17 @@ export const PaymentsView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {!isCoach && (
+          {currentUser.role === 'ADMIN' && (
             <button
-              onClick={() => setIsCollectModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+              onClick={() => {
+                setTempUnitPrice(sessionUnitPrice);
+                setIsPricingModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+              title="Cài đặt đơn giá 1 buổi học để tự động tính học phí"
             >
-              <Receipt className="w-4 h-4" />
-              <span>+ Thu Tiền Tại Sân</span>
+              <DollarSign className="w-4 h-4 text-emerald-600" />
+              <span>Đơn giá: {sessionUnitPrice.toLocaleString('vi-VN')}đ / buổi</span>
             </button>
           )}
 
@@ -196,7 +172,7 @@ export const PaymentsView: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Tìm theo mã phiếu, tên học viên, lớp học..."
+            placeholder="Tìm theo tên học viên, số điện thoại..."
             className="w-full pl-9 pr-4 py-2 bg-slate-50 text-sm text-[#0F172A] rounded-xl border border-slate-200 outline-none focus:border-[#10B981]"
           />
         </div>
@@ -212,19 +188,6 @@ export const PaymentsView: React.FC = () => {
             <option value="Paid">Đã đóng</option>
             <option value="Unpaid">Chưa đóng</option>
             <option value="Overdue">Quá hạn</option>
-          </select>
-
-          <select
-            value={selectedType}
-            onChange={e => setSelectedType(e.target.value)}
-            aria-label="Lọc theo loại khoản thu"
-            className="px-3 py-2 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
-          >
-            <option value="ALL">Tất cả loại thu</option>
-            <option value="Tuition">Học phí</option>
-            <option value="CourtFee">Tiền thuê sân</option>
-            <option value="Equipment">Cầu & Nước</option>
-            <option value="Other">Khác</option>
           </select>
 
           <select
@@ -249,13 +212,11 @@ export const PaymentsView: React.FC = () => {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50/75 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                <th className="py-3.5 px-5">Mã phiếu</th>
-                <th className="py-3.5 px-4">Người nộp / Học viên</th>
-                <th className="py-3.5 px-4">Lớp / Dịch vụ</th>
+                <th className="py-3.5 px-5">Người nộp / Học viên</th>
+                <th className="py-3.5 px-4">Số điện thoại</th>
                 <th className="py-3.5 px-4">Số tiền</th>
                 <th className="py-3.5 px-4">Kỳ học phí</th>
                 <th className="py-3.5 px-4">Hạn nộp / Ngày nộp</th>
-                <th className="py-3.5 px-4">Hình thức</th>
                 <th className="py-3.5 px-4">Trạng thái</th>
                 <th className="py-3.5 px-5 text-right">Thao tác</th>
               </tr>
@@ -263,7 +224,7 @@ export const PaymentsView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     Không tìm thấy phiếu thu nào.
                   </td>
                 </tr>
@@ -271,11 +232,6 @@ export const PaymentsView: React.FC = () => {
                 filteredPayments.map(p => (
                   <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-4 px-5">
-                      <span className="font-bold text-[#0F172A] bg-slate-100 px-2.5 py-1 rounded-md text-xs">
-                        {p.code}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4">
                       <div className="font-bold text-[#0F172A] flex items-center gap-1.5 flex-wrap">
                         {p.studentId ? (
                           <button
@@ -287,27 +243,6 @@ export const PaymentsView: React.FC = () => {
                         ) : (
                           <span>{p.studentName}</span>
                         )}
-                        {p.paymentType && (
-                          <span
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                              p.paymentType === 'Tuition'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : p.paymentType === 'CourtFee'
-                                ? 'bg-sky-100 text-sky-800'
-                                : p.paymentType === 'Equipment'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {p.paymentType === 'Tuition'
-                              ? 'Học phí'
-                              : p.paymentType === 'CourtFee'
-                              ? 'Thuê sân'
-                              : p.paymentType === 'Equipment'
-                              ? 'Cầu & Nước'
-                              : 'Khác'}
-                          </span>
-                        )}
                       </div>
                       {p.collectorName && (
                         <div className="text-[10px] text-slate-400 font-medium">
@@ -315,8 +250,8 @@ export const PaymentsView: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="py-4 px-4 font-medium text-slate-800 text-xs">
-                      {p.className || p.note || 'Dịch vụ sân bãi'}
+                    <td className="py-4 px-4 text-xs font-semibold text-slate-700">
+                      {p.studentPhone || students.find(s => s.id === p.studentId)?.phone || '—'}
                     </td>
                     <td className="py-4 px-4 font-bold text-[#10B981]">
                       {p.amount.toLocaleString('vi-VN')}đ
@@ -331,20 +266,29 @@ export const PaymentsView: React.FC = () => {
                         </span>
                       )}
                     </td>
-                    <td className="py-4 px-4 text-xs text-slate-600">{p.method || '—'}</td>
                     <td className="py-4 px-4">
                       <PaymentBadge status={p.status} />
                     </td>
                     <td className="py-4 px-5 text-right">
                       {p.status !== 'Paid' ? (
-                        <button
-                          onClick={() => confirmPayment(p.id)}
-                          className="px-3.5 py-1.5 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                        >
-                          Xác nhận thu
-                        </button>
+                        canConfirmPayment ? (
+                          <button
+                            onClick={() => setConfirmingPayment(p)}
+                            className="px-3.5 py-1.5 bg-[#10B981] hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Xác nhận thu</span>
+                          </button>
+                        ) : (
+                          <span className="text-xs font-semibold text-slate-400">Chờ thu</span>
+                        )
                       ) : (
-                        <span className="text-xs font-semibold text-slate-400">Đã thu</span>
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-emerald-700 block">Đã thu</span>
+                          {p.collectorName && (
+                            <span className="text-[10px] text-slate-400 block">{p.collectorName}</span>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -370,9 +314,6 @@ export const PaymentsView: React.FC = () => {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-                      {p.code}
-                    </span>
                     {p.studentId ? (
                       <button
                         onClick={() => navigate('students', p.studentId)}
@@ -383,20 +324,9 @@ export const PaymentsView: React.FC = () => {
                     ) : (
                       <span className="font-bold text-slate-900 text-sm">{p.studentName}</span>
                     )}
-                    {p.paymentType && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-                        {p.paymentType === 'Tuition'
-                          ? 'Học phí'
-                          : p.paymentType === 'CourtFee'
-                          ? 'Thuê sân'
-                          : p.paymentType === 'Equipment'
-                          ? 'Cầu & Nước'
-                          : 'Khác'}
-                      </span>
-                    )}
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    Lớp: {p.className || p.note || 'Dịch vụ sân bãi'}
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    SĐT: <span className="font-semibold text-slate-700">{p.studentPhone || students.find(s => s.id === p.studentId)?.phone || '—'}</span>
                   </div>
                 </div>
                 <PaymentBadge status={p.status} />
@@ -431,13 +361,25 @@ export const PaymentsView: React.FC = () => {
                   )}
                 </div>
 
-                {p.status !== 'Paid' && (
-                  <button
-                    onClick={() => confirmPayment(p.id)}
-                    className="px-3.5 py-1.5 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                  >
-                    Xác nhận thu
-                  </button>
+                {p.status !== 'Paid' ? (
+                  canConfirmPayment ? (
+                    <button
+                      onClick={() => setConfirmingPayment(p)}
+                      className="px-3.5 py-1.5 bg-[#10B981] hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Xác nhận thu</span>
+                    </button>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-400">Chờ thu</span>
+                  )
+                ) : (
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-emerald-700 block">Đã thu</span>
+                    {p.collectorName && (
+                      <span className="text-[10px] text-slate-400 block">{p.collectorName}</span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -445,275 +387,178 @@ export const PaymentsView: React.FC = () => {
         )}
       </div>
 
-      {/* Cashier Collection Modal */}
+      {/* Modal Cài Đặt Đơn Giá 1 Buổi Học (Chỉ Admin Hệ Thống) */}
       <Modal
-        isOpen={isCollectModalOpen}
-        onClose={() => setIsCollectModalOpen(false)}
-        title="Thu Tiền Trực Tiếp Tại Sân (Thu Ngân / Quản Lý Cơ Sở)"
-        subtitle={`Cơ sở: ${currentUser.facilityName || 'Cơ sở 1 - Cầu Giấy'} • Thu ngân: ${currentUser.name}`}
+        isOpen={isPricingModalOpen}
+        onClose={() => setIsPricingModalOpen(false)}
+        title="Cài Đặt Đơn Giá Buổi Học (Admin)"
+        subtitle="Đơn giá này áp dụng để hệ thống tự động tính tiền học phí khi thêm học viên mới theo số buổi đăng ký."
       >
-        <form onSubmit={handleConfirmCollect} className="space-y-4">
-          {/* Payment Type Tabs */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-              Loại khoản thu *
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { id: 'Tuition', label: 'Học phí' },
-                { id: 'CourtFee', label: 'Thuê sân' },
-                { id: 'Equipment', label: 'Cầu & Nước' },
-                { id: 'Other', label: 'Khác' }
-              ].map(t => {
-                const isSelected = collectType === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => {
-                      setCollectType(t.id as any);
-                      if (t.id === 'CourtFee') {
-                        setCollectAmount(150000);
-                        setCollectNote('Thu tiền thuê sân 1 giờ');
-                      } else if (t.id === 'Equipment') {
-                        setCollectAmount(50000);
-                        setCollectNote('Nước uống & cầu lẻ');
-                      } else if (t.id === 'Tuition') {
-                        setCollectAmount(1800000);
-                        setCollectNote('Thu học phí');
-                      }
-                    }}
-                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{t.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* If Tuition: Select Student */}
-          {collectType === 'Tuition' ? (
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Chọn học viên nộp học phí *
-              </label>
-              <select
-                value={selectedStudentId}
-                onChange={e => handleStudentSelect(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
-                required
-              >
-                <option value="">-- Chọn học viên từ danh sách --</option>
-                {students.map(st => (
-                  <option key={st.id} value={st.id}>
-                    {st.name} ({st.code}) • {st.className} • Còn {st.remainingSessions} buổi
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Họ tên người nộp *
-                </label>
-                <input
-                  type="text"
-                  value={payerName}
-                  onChange={e => setPayerName(e.target.value)}
-                  placeholder="VD: Anh Tuấn (Sân 2)"
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Số điện thoại
-                </label>
-                <input
-                  type="text"
-                  value={payerPhone}
-                  onChange={e => setPayerPhone(e.target.value)}
-                  placeholder="VD: 0988 123 456"
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Amount & Quick Presets */}
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            setSessionUnitPrice(Number(tempUnitPrice));
+            setIsPricingModalOpen(false);
+          }}
+          className="space-y-4"
+        >
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Số tiền thu (VNĐ) *
+              Đơn giá cho 1 buổi học (VNĐ) *
             </label>
             <input
               type="number"
-              value={collectAmount}
-              onChange={e => setCollectAmount(Number(e.target.value))}
-              className="w-full px-3.5 py-2 text-base border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-black text-[#10B981]"
               required
-            />
-
-            {/* Quick Presets */}
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {collectType === 'Tuition' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(1800000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    1.800.000đ (12b)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(2400000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    2.400.000đ (16b)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(3400000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    3.400.000đ (24b)
-                  </button>
-                </>
-              )}
-              {collectType === 'CourtFee' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(150000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    150.000đ (1 giờ)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(300000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    300.000đ (2 giờ)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(450000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    450.000đ (3 giờ)
-                  </button>
-                </>
-              )}
-              {collectType === 'Equipment' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(30000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    30.000đ (2 chai nước)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(75000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    75.000đ (3 quả cầu)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCollectAmount(260000)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
-                  >
-                    260.000đ (1 hộp Yonex)
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Payment Method */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-              Hình thức thanh toán *
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { id: 'Chuyển khoản QR', label: 'Chuyển QR' },
-                { id: 'Tiền mặt', label: 'Tiền mặt' },
-                { id: 'Thẻ ngân hàng', label: 'Cà thẻ' },
-                { id: 'Ví MoMo', label: 'Ví MoMo' }
-              ].map(m => {
-                const isSelected = collectMethod === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setCollectMethod(m.id as any)}
-                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{m.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Note */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Ghi chú thu ngân
-            </label>
-            <input
-              type="text"
-              value={collectNote}
-              onChange={e => setCollectNote(e.target.value)}
-              placeholder="VD: Thu 2 chai Pocari + 1 quấn cán vợt..."
-              className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
+              min={10000}
+              step={10000}
+              value={tempUnitPrice}
+              onChange={e => setTempUnitPrice(Number(e.target.value))}
+              className="w-full px-3.5 py-2.5 text-lg font-black text-emerald-600 border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
             />
           </div>
 
-          {/* Submitter info reminder */}
-          <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 flex items-center justify-between border border-slate-100">
-            <span>
-              Cơ sở ghi nhận:{' '}
-              <strong className="text-slate-800">
-                {currentUser.facilityName || 'Cơ sở 1 - Cầu Giấy'}
-              </strong>
-            </span>
-            <span>
-              Thu ngân: <strong className="text-slate-800">{currentUser.name}</strong>
-            </span>
+          {/* Quick Preset Buttons */}
+          <div>
+            <span className="block text-[11px] font-bold text-slate-500 mb-1.5">Gợi ý đơn giá phổ biến:</span>
+            <div className="flex flex-wrap gap-2">
+              {[100000, 120000, 150000, 180000, 200000].map(price => (
+                <button
+                  key={price}
+                  type="button"
+                  onClick={() => setTempUnitPrice(price)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                    tempUnitPrice === price
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {price.toLocaleString('vi-VN')}đ / buổi
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          {/* Calculation preview */}
+          <div className="p-3.5 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs space-y-1.5">
+            <span className="font-bold text-slate-700 block">Ví dụ tự động tính học phí khi thêm học viên:</span>
+            <div className="flex justify-between text-slate-600">
+              <span>• Gói 8 buổi:</span>
+              <strong className="text-emerald-700">{(tempUnitPrice * 8).toLocaleString('vi-VN')}đ</strong>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>• Gói 12 buổi:</span>
+              <strong className="text-emerald-700">{(tempUnitPrice * 12).toLocaleString('vi-VN')}đ</strong>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>• Gói 16 buổi:</span>
+              <strong className="text-emerald-700">{(tempUnitPrice * 16).toLocaleString('vi-VN')}đ</strong>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>• Gói 24 buổi:</span>
+              <strong className="text-emerald-700">{(tempUnitPrice * 24).toLocaleString('vi-VN')}đ</strong>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => setIsCollectModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              onClick={() => setIsPricingModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
             >
-              Hủy
+              Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              className="px-5 py-2 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
             >
-              <Receipt className="w-4 h-4" />
-              <span>Xác Nhận Đã Thu Tiền</span>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Lưu Đơn Giá</span>
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Xác Nhận Thu Tiền Học Phí - Cần nút Confirm để xác nhận */}
+      <Modal
+        isOpen={Boolean(confirmingPayment)}
+        onClose={() => setConfirmingPayment(null)}
+        title="Xác Nhận Thu Tiền Học Phí"
+        subtitle={
+          confirmingPayment
+            ? `Học viên: ${confirmingPayment.studentName} • Người xác nhận: ${currentUser.name} (${
+                currentUser.role === 'FACILITY_MANAGER' ? 'Quản lý sân' : 'Admin'
+              })`
+            : ''
+        }
+      >
+        {confirmingPayment && (
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              confirmPayment(confirmingPayment.id);
+              setConfirmingPayment(null);
+            }}
+            className="space-y-4"
+          >
+            <div className="p-4 bg-emerald-50/80 rounded-2xl border border-emerald-200 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500">Học viên:</span>
+                <strong className="text-sm font-extrabold text-[#0F172A]">
+                  {confirmingPayment.studentName}
+                </strong>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500">Số điện thoại:</span>
+                <span className="font-semibold text-slate-700">
+                  {confirmingPayment.studentPhone || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500">Kỳ học phí:</span>
+                <span className="font-semibold text-slate-700">
+                  {confirmingPayment.month}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-emerald-200/80 flex items-center justify-between">
+                <span className="text-xs font-black text-slate-700 uppercase">
+                  Số tiền cần thu:
+                </span>
+                <span className="text-xl font-black text-[#10B981]">
+                  {confirmingPayment.amount.toLocaleString('vi-VN')}đ
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 flex items-center justify-between border border-slate-200/70">
+              <span>
+                Quyền xác nhận:{' '}
+                <strong className="text-slate-800">
+                  {currentUser.role === 'FACILITY_MANAGER' ? 'Quản lý sân' : 'Admin'}
+                </strong>
+              </span>
+              <span>
+                Người thu: <strong className="text-slate-800">{currentUser.name}</strong>
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmingPayment(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl shadow-md shadow-emerald-900/15 cursor-pointer flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>XÁC NHẬN ĐÃ THU TIỀN</span>
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   );

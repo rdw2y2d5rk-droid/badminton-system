@@ -39,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const totalUnreadCount = notifications.filter(n => !n.read).length + (!isCoach ? pendingScheduleCount : 0);
+  const totalUnreadCount = notifications.filter(n => !n.read).length + (currentUser.role === 'ADMIN' ? pendingScheduleCount : 0);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -140,7 +140,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
               </div>
 
               {/* Pending Schedule Alert for Admin */}
-              {!isCoach && pendingScheduleCount > 0 && (
+              {currentUser.role === 'ADMIN' && pendingScheduleCount > 0 && (
                 <div
                   onClick={() => {
                     navigate('schedule');

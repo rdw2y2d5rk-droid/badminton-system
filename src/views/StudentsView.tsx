@@ -31,15 +31,13 @@ export const StudentsView: React.FC = () => {
   const {
     students,
     classes,
-    coaches,
     facilities,
     shifts,
     courts,
+    payments,
+    sessionUnitPrice,
     navigate,
     addStudent,
-    confirmStudentSchedule,
-    rejectStudentSchedule,
-    pendingScheduleCount,
     importStudentsFromExcel,
     isCoach,
     currentUser,
@@ -48,11 +46,8 @@ export const StudentsView: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFacility, setSelectedFacility] = useState('ALL');
-  const [selectedClass, setSelectedClass] = useState('ALL');
-  const [selectedCoach, setSelectedCoach] = useState('ALL');
   const [selectedPayment, setSelectedPayment] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
-  const [selectedScheduleStatus, setSelectedScheduleStatus] = useState<'ALL' | 'pending_admin' | 'confirmed'>('ALL');
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -62,9 +57,11 @@ export const StudentsView: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newFacilityId, setNewFacilityId] = useState(facilities[0]?.id || 'CS01');
+  const defaultFacilityId = (currentUser.role === 'FACILITY_MANAGER' && currentUser.facilityId)
+    ? currentUser.facilityId
+    : (facilities[0]?.id || 'CS01');
+  const [newFacilityId, setNewFacilityId] = useState(defaultFacilityId);
   const [newShiftId, setNewShiftId] = useState(shifts[3]?.id || 'CA04'); // Default 18:00 - 19:30
-  const [newClassId, setNewClassId] = useState(classes[0]?.id || 'BD-B01');
 
   // Specific Dates & Month Mini-Calendar Picker
   const [selectedCalMonth, setSelectedCalMonth] = useState('2026-08'); // YYYY-MM
@@ -72,17 +69,21 @@ export const StudentsView: React.FC = () => {
   const [specificDates, setSpecificDates] = useState<string[]>([
     '2026-08-03', '2026-08-05', '2026-08-07', '2026-08-10', '2026-08-12', '2026-08-14', '2026-08-17', '2026-08-19', '2026-08-21', '2026-08-24', '2026-08-26', '2026-08-28'
   ]);
-  const [adminDirectConfirm, setAdminDirectConfirm] = useState(true);
 
-  const [newPaymentStatus, setNewPaymentStatus] = useState<PaymentStatus>('Paid');
-  const [newEmergency, setNewEmergency] = useState('');
+  // Pricing & Sessions
+  const [newUnitPrice, setNewUnitPrice] = useState<number>(sessionUnitPrice || 150000);
+  const [newSessionsCount, setNewSessionsCount] = useState<number>(12);
+
+  const [newPaymentStatus, setNewPaymentStatus] = useState<PaymentStatus>('Unpaid');
   const [newNote, setNewNote] = useState('');
 
   // Preset helpers for interactive month picker
   const toggleDate = (dateStr: string) => {
-    setSpecificDates(prev =>
-      prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort()
-    );
+    setSpecificDates(prev => {
+      const next = prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort();
+      setNewSessionsCount(next.length > 0 ? next.length : 12);
+      return next;
+    });
   };
 
   const applyQuickPreset = (preset: 'all' | 'weekdays' | 'weekend' | 'clear') => {
@@ -92,6 +93,7 @@ export const StudentsView: React.FC = () => {
 
     if (preset === 'clear') {
       setSpecificDates([]);
+      setNewSessionsCount(12);
       return;
     }
 
@@ -109,13 +111,13 @@ export const StudentsView: React.FC = () => {
       }
     }
     setSpecificDates(result);
+    setNewSessionsCount(result.length > 0 ? result.length : 12);
   };
 
   // Excel Import State
   const [importText, setImportText] = useState('');
   const [previewRows, setPreviewRows] = useState<Array<Omit<Student, 'id' | 'code'>>>([]);
   const [importFileName, setImportFileName] = useState('');
-
 
   const displayStudents = isCoach ? assignedStudents : students;
 
@@ -124,25 +126,21 @@ export const StudentsView: React.FC = () => {
       student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.phone.includes(searchQuery) ||
-      student.className.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (student.className && student.className.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (student.facilityName && student.facilityName.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesFacility = selectedFacility === 'ALL' || student.facilityId === selectedFacility;
-    const matchesClass = selectedClass === 'ALL' || student.classId === selectedClass;
-    const matchesCoach = selectedCoach === 'ALL' || student.coachId === selectedCoach;
+    const matchesFacility =
+      currentUser.role === 'FACILITY_MANAGER'
+        ? (currentUser.facilityId ? student.facilityId === currentUser.facilityId : true)
+        : (selectedFacility === 'ALL' || student.facilityId === selectedFacility);
     const matchesPayment = selectedPayment === 'ALL' || student.paymentStatus === selectedPayment;
     const matchesStatus = selectedStatus === 'ALL' || student.status === selectedStatus;
-    const matchesScheduleStatus =
-      selectedScheduleStatus === 'ALL' || student.scheduleStatus === selectedScheduleStatus;
 
     return (
       matchesSearch &&
       matchesFacility &&
-      matchesClass &&
-      matchesCoach &&
       matchesPayment &&
-      matchesStatus &&
-      matchesScheduleStatus
+      matchesStatus
     );
   });
 
@@ -150,24 +148,26 @@ export const StudentsView: React.FC = () => {
     e.preventDefault();
     if (!newName.trim() || !newPhone.trim()) return;
 
-    const targetClass = classes.find(c => c.id === newClassId);
-    const targetFacility = facilities.find(f => f.id === newFacilityId);
+    const effectiveFacilityId = currentUser.role === 'FACILITY_MANAGER' && currentUser.facilityId
+      ? currentUser.facilityId
+      : newFacilityId;
+    const targetFacility = facilities.find(f => f.id === effectiveFacilityId) || facilities[0];
     const targetShift = shifts.find(s => s.id === newShiftId);
 
-    const sessionsCount = specificDates.length > 0 ? specificDates.length : 12;
+    const sessionsCount = Number(newSessionsCount) || (specificDates.length > 0 ? specificDates.length : 12);
+    const unitPrice = Number(newUnitPrice) || sessionUnitPrice || 150000;
+    const calculatedTuition = sessionsCount * unitPrice;
     const allowedLeavesCount = Math.floor(sessionsCount / 4);
-    const isCurrentUserAdmin = currentUser.role === 'ADMIN';
-    const scheduleStatus = isCurrentUserAdmin ? (adminDirectConfirm ? 'confirmed' : 'pending_admin') : 'pending_admin';
 
     addStudent({
       name: newName,
       phone: newPhone,
       email: newEmail || `${newName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
       avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 100000)}?w=150&auto=format&fit=crop&q=80`,
-      classId: newClassId,
-      className: targetClass?.name || 'Beginner 01',
-      coachId: targetClass?.coachId || 'HLV001',
-      coachName: targetClass?.coachName || 'Nguyễn Minh Anh',
+      classId: '',
+      className: 'Chưa xếp lớp',
+      coachId: '',
+      coachName: 'Chưa phân công',
 
       // Sân & Ca học (Thống nhất Sân và Cơ sở)
       facilityId: targetFacility?.id || 'CS01',
@@ -182,10 +182,11 @@ export const StudentsView: React.FC = () => {
       // Month & Specific Dates
       month: newMonthStr,
       specificDates: specificDates,
-      scheduleStatus: scheduleStatus,
+      scheduleStatus: 'confirmed',
 
-      // Sessions & Leaves
+      // Sessions & Leaves & Auto Tuition
       packageSessions: sessionsCount,
+      tuitionFee: calculatedTuition,
       attendedSessions: 0,
       remainingSessions: sessionsCount,
       allowedLeaves: allowedLeavesCount,
@@ -195,9 +196,8 @@ export const StudentsView: React.FC = () => {
       paymentStatus: newPaymentStatus,
       status: 'Studying',
       joinedDate: '28/08/2026',
-      emergencyContact: newEmergency || 'Gia đình - ' + newPhone,
-      note: newNote,
-      skillLevel: targetClass?.level || 'Beginner'
+      note: newNote ? `${newNote} (Đơn giá: ${unitPrice.toLocaleString('vi-VN')}đ/buổi)` : `Đơn giá: ${unitPrice.toLocaleString('vi-VN')}đ/buổi`,
+      skillLevel: 'Beginner'
     });
 
     setIsAddModalOpen(false);
@@ -205,6 +205,7 @@ export const StudentsView: React.FC = () => {
     setNewPhone('');
     setNewEmail('');
     setNewNote('');
+    setNewPaymentStatus('Unpaid');
   };
 
   // Excel / CSV Template Download
@@ -218,7 +219,7 @@ export const StudentsView: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', 'Mau_Import_Hoc_Vien_SmashZone.csv');
+    link.setAttribute('download', 'mau_danh_sach_hoc_vien_smashzone.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -286,7 +287,7 @@ export const StudentsView: React.FC = () => {
           allowedLeaves: Math.floor(sessions / 4),
           usedLeaves: 0,
           carriedOverSessions: 0,
-          paymentStatus: 'Paid',
+          paymentStatus: 'Unpaid',
           status: 'Studying',
           joinedDate: '28/08/2026',
           emergencyContact: 'Gia đình - ' + phone,
@@ -357,43 +358,6 @@ export const StudentsView: React.FC = () => {
         )}
       </div>
 
-      {/* Banner cảnh báo Admin có yêu cầu lịch học mới */}
-      {pendingScheduleCount > 0 && (
-        <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
-              <Bell className="w-5 h-5 animate-bounce" />
-            </div>
-            <div>
-              <div className="font-extrabold text-sm text-amber-950 flex items-center gap-2">
-                <span>Có {pendingScheduleCount} yêu cầu lịch học theo ngày cụ thể đang chờ Admin duyệt & lưu lịch!</span>
-                <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-200 text-amber-900">
-                  Cần xử lý
-                </span>
-              </div>
-              <p className="text-xs text-amber-800 mt-0.5">
-                Học viên đã đăng ký các ngày học cụ thể trong tháng. Admin vui lòng kiểm tra và duyệt lịch để chính thức kích hoạt.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setSelectedScheduleStatus('pending_admin')}
-              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              Lọc chờ duyệt ({pendingScheduleCount})
-            </button>
-            <button
-              onClick={() => navigate('schedule')}
-              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              Xem Lịch Tổng →
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Filter & Search Toolbar */}
       <div className="p-4 bg-white rounded-2xl border border-slate-100 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         {/* Search */}
@@ -403,81 +367,49 @@ export const StudentsView: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Tìm tên học viên, mã HV (HV001), SĐT, sân cầu lông..."
+            placeholder={
+              currentUser.role === 'ADMIN'
+                ? 'Tìm tên học viên, SĐT, sân cầu lông...'
+                : currentUser.role === 'FACILITY_MANAGER'
+                ? 'Tìm tên học viên, mã HV (HV001), SĐT...'
+                : 'Tìm tên học viên, mã HV (HV001), SĐT, sân cầu lông...'
+            }
             className="w-full pl-9 pr-4 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-sm text-[#0F172A] placeholder:text-slate-400 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] transition-all"
           />
         </div>
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Facility Filter - Unified Badminton Court */}
-          <select
-            value={selectedFacility}
-            onChange={e => setSelectedFacility(e.target.value)}
-            aria-label="Lọc theo sân cầu lông"
-            className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
-          >
-            <option value="ALL">Tất cả sân cầu lông</option>
-            {facilities.map(f => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Schedule Status Filter */}
-          <select
-            value={selectedScheduleStatus}
-            onChange={e => setSelectedScheduleStatus(e.target.value as any)}
-            aria-label="Lọc theo trạng thái duyệt lịch"
-            className="px-3 py-1.5 bg-amber-50/50 text-xs font-bold text-amber-900 rounded-xl border border-amber-200 outline-none focus:border-amber-400 cursor-pointer"
-          >
-            <option value="ALL">Tất cả trạng thái lịch</option>
-            <option value="pending_admin">⏳ Chờ Admin duyệt ({students.filter(s => s.scheduleStatus === 'pending_admin').length})</option>
-            <option value="confirmed">✓ Lịch đã xác nhận</option>
-          </select>
-
-          <select
-            value={selectedClass}
-            onChange={e => setSelectedClass(e.target.value)}
-            aria-label="Lọc theo lớp học"
-            className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
-          >
-            <option value="ALL">Tất cả lớp học</option>
-            {classes.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-
-          {!isCoach && (
+          {/* Facility Filter - Hidden for Facility Manager */}
+          {currentUser.role !== 'FACILITY_MANAGER' && (
             <select
-              value={selectedCoach}
-              onChange={e => setSelectedCoach(e.target.value)}
-              aria-label="Lọc theo huấn luyện viên"
+              value={selectedFacility}
+              onChange={e => setSelectedFacility(e.target.value)}
+              aria-label="Lọc theo sân cầu lông"
               className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
             >
-              <option value="ALL">Tất cả HLV</option>
-              {coaches.map(c => (
-                <option key={c.id} value={c.id}>
-                  HLV {c.name}
+              <option value="ALL">Tất cả sân cầu lông</option>
+              {facilities.map(f => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
                 </option>
               ))}
             </select>
           )}
 
-          <select
-            value={selectedPayment}
-            onChange={e => setSelectedPayment(e.target.value)}
-            aria-label="Lọc theo học phí"
-            className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
-          >
-            <option value="ALL">Tất cả học phí</option>
-            <option value="Paid">Đã đóng</option>
-            <option value="Unpaid">Chưa đóng</option>
-            <option value="Overdue">Quá hạn</option>
-          </select>
+          {!isCoach && (
+            <select
+              value={selectedPayment}
+              onChange={e => setSelectedPayment(e.target.value)}
+              aria-label="Lọc theo học phí"
+              className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
+            >
+              <option value="ALL">Tất cả học phí</option>
+              <option value="Paid">Đã đóng</option>
+              <option value="Unpaid">Chưa đóng</option>
+              <option value="Overdue">Quá hạn</option>
+            </select>
+          )}
 
           <select
             value={selectedStatus}
@@ -499,11 +431,14 @@ export const StudentsView: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                <th className="py-3.5 px-5">Mã HV</th>
+                {currentUser.role !== 'ADMIN' && (
+                  <th className="py-3.5 px-5">Mã HV</th>
+                )}
                 <th className="py-3.5 px-4">Học viên</th>
                 <th className="py-3.5 px-4">SĐT</th>
-                <th className="py-3.5 px-4">Sân cầu lông</th>
-                <th className="py-3.5 px-4">Lịch học & Phê duyệt</th>
+                {currentUser.role !== 'FACILITY_MANAGER' && (
+                  <th className="py-3.5 px-4">Sân cầu lông</th>
+                )}
                 <th className="py-3.5 px-4">Quỹ phép</th>
                 <th className="py-3.5 px-4 w-52">Tiến độ buổi học</th>
                 <th className="py-3.5 px-4">Học phí</th>
@@ -514,7 +449,14 @@ export const StudentsView: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-sm">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td
+                    colSpan={
+                      7 +
+                      (currentUser.role !== 'ADMIN' ? 1 : 0) +
+                      (currentUser.role !== 'FACILITY_MANAGER' ? 1 : 0)
+                    }
+                    className="py-12 text-center text-slate-400"
+                  >
                     Không tìm thấy học viên nào.
                   </td>
                 </tr>
@@ -530,11 +472,13 @@ export const StudentsView: React.FC = () => {
                       onClick={() => navigate('students', student.id)}
                       className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
                     >
-                      <td className="py-4 px-5">
-                        <span className="font-bold text-[#0F172A] bg-slate-100 px-2.5 py-1 rounded-md text-xs">
-                          {student.code}
-                        </span>
-                      </td>
+                      {currentUser.role !== 'ADMIN' && (
+                        <td className="py-4 px-5">
+                          <span className="font-bold text-[#0F172A] bg-slate-100 px-2.5 py-1 rounded-md text-xs">
+                            {student.code}
+                          </span>
+                        </td>
+                      )}
                       <td className="py-4 px-4 font-bold text-[#0F172A] group-hover:text-[#10B981] transition-colors">
                         <div className="flex items-center gap-2.5">
                           <img
@@ -544,58 +488,24 @@ export const StudentsView: React.FC = () => {
                           />
                           <div>
                             <div>{student.name}</div>
-                            <div className="text-[11px] text-slate-400 font-normal">{student.className}</div>
+                            <div className="text-[11px] text-slate-400 font-normal">{student.className || 'Chưa xếp lớp'}</div>
                           </div>
                         </div>
                       </td>
                       <td className="py-4 px-4 text-slate-600 text-xs font-medium">
                         {student.phone}
                       </td>
-                      <td className="py-4 px-4 text-xs">
-                        <strong className="text-[#0F172A] block flex items-center gap-1">
-                          <Building2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <span>{student.facilityName || student.courtName || 'Sân Cầu Lông Cầu Giấy'}</span>
-                        </strong>
-                        <span className="text-slate-400 text-[11px]">
-                          {student.shiftName || student.fixedShiftName || 'Ca Tối 1'}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4 text-xs">
-                        {student.scheduleStatus === 'pending_admin' ? (
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                              <Clock className="w-3 h-3 text-amber-600" />
-                              Chờ Admin duyệt lịch
-                            </span>
-                            <div className="text-[11px] font-bold text-slate-700">
-                              {student.specificDates?.length || student.packageSessions} ngày trong {student.month || 'tháng'}
-                            </div>
-                            {currentUser.role === 'ADMIN' && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  confirmStudentSchedule(student.id);
-                                }}
-                                className="mt-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1"
-                              >
-                                <CheckCircle2 className="w-3 h-3" />
-                                <span>Duyệt & Lưu lịch</span>
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              Lịch đã xác nhận
-                            </span>
-                            <div className="text-[11px] font-medium text-slate-600">
-                              {student.specificDates?.length || student.packageSessions} ngày cụ thể
-                            </div>
-                          </div>
-                        )}
-                      </td>
+                      {currentUser.role !== 'FACILITY_MANAGER' && (
+                        <td className="py-4 px-4 text-xs">
+                          <strong className="text-[#0F172A] block flex items-center gap-1">
+                            <Building2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>{student.facilityName || student.courtName || 'Sân Cầu Lông Cầu Giấy'}</span>
+                          </strong>
+                          <span className="text-slate-400 text-[11px]">
+                            {student.shiftName || student.fixedShiftName || 'Ca Tối 1'}
+                          </span>
+                        </td>
+                      )}
                       <td className="py-4 px-4 text-xs">
                         <div className="flex items-center gap-1 font-bold">
                           <span className={used >= allowed ? 'text-rose-600' : 'text-[#10B981]'}>
@@ -661,30 +571,38 @@ export const StudentsView: React.FC = () => {
                   />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
-                        {student.code}
-                      </span>
+                      {currentUser.role !== 'ADMIN' && (
+                        <span className="text-xs font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
+                          {student.code}
+                        </span>
+                      )}
                       <h3 className="font-bold text-slate-900 text-sm">{student.name}</h3>
                     </div>
                     <div className="text-xs text-slate-500">{student.phone}</div>
                   </div>
                 </div>
-                <PaymentBadge status={student.paymentStatus} />
+                <div>
+                  <PaymentBadge status={student.paymentStatus} />
+                </div>
               </div>
 
               <div className="p-2.5 bg-slate-50 rounded-xl text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Cơ sở & Sân:</span>
-                  <strong className="text-slate-800">{student.facilityName || 'Cơ sở Cầu Giấy'} - {student.courtName || 'Sân 02'}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Lịch học:</span>
-                  <strong className="text-emerald-700">
-                    {student.specificDates && student.specificDates.length > 0
-                      ? `${student.specificDates.length} buổi linh hoạt`
-                      : (student.fixedDays?.join(' · ') || 'T2 - CN')} ({student.fixedShiftName || '18:00 - 19:30'})
-                  </strong>
-                </div>
+                {currentUser.role !== 'FACILITY_MANAGER' && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Cơ sở & Sân:</span>
+                    <strong className="text-slate-800">{student.facilityName || 'Cơ sở Cầu Giấy'} - {student.courtName || 'Sân 02'}</strong>
+                  </div>
+                )}
+                {currentUser.role === 'ADMIN' && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Lịch học:</span>
+                    <strong className="text-emerald-700">
+                      {student.specificDates && student.specificDates.length > 0
+                        ? `${student.specificDates.length} buổi linh hoạt`
+                        : (student.fixedDays?.join(' · ') || 'T2 - CN')} ({student.fixedShiftName || '18:00 - 19:30'})
+                    </strong>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-slate-400">Quỹ phép:</span>
                   <strong className="text-[#10B981]">{used} / {allowed} phép</strong>
@@ -748,26 +666,27 @@ export const StudentsView: React.FC = () => {
             />
           </div>
 
-          {/* Sân Cầu Lông Đăng Ký Học (Thống nhất Sân và Cơ sở) */}
-          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Sân cầu lông đăng ký học *
-            </label>
-            <select
-              value={newFacilityId}
-              onChange={e => setNewFacilityId(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
-            >
-              {facilities.map(f => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Sân Cầu Lông & Ca Học */}
+          <div className={`grid ${currentUser.role === 'FACILITY_MANAGER' ? 'grid-cols-1' : 'grid-cols-2'} gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-100`}>
+            {currentUser.role !== 'FACILITY_MANAGER' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Sân cầu lông đăng ký học *
+                </label>
+                <select
+                  value={newFacilityId}
+                  onChange={e => setNewFacilityId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
+                >
+                  {facilities.map(f => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-          {/* Ca Học & Lớp Học */}
-          <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Ca học *</label>
               <select
@@ -778,21 +697,6 @@ export const StudentsView: React.FC = () => {
                 {shifts.map(s => (
                   <option key={s.id} value={s.id}>
                     {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Gán vào Lớp học *</label>
-              <select
-                value={newClassId}
-                onChange={e => setNewClassId(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
-              >
-                {classes.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
                   </option>
                 ))}
               </select>
@@ -940,59 +844,87 @@ export const StudentsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Admin Schedule Approval notice or toggle */}
-          {currentUser.role === 'ADMIN' ? (
-            <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-extrabold text-emerald-950 flex items-center gap-1">
-                  <ShieldAlert className="w-4 h-4 text-emerald-600" />
-                  Quyền Quản Trị Hệ Thống (ADMIN)
-                </span>
-                <p className="text-[11px] text-emerald-800">
-                  Bạn có quyền duyệt và lưu lịch học trực tiếp vào hệ thống ngay khi tạo học viên.
-                </p>
-              </div>
-              <label className="flex items-center gap-2 text-xs font-bold text-emerald-900 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={adminDirectConfirm}
-                  onChange={e => setAdminDirectConfirm(e.target.checked)}
-                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                />
-                <span>💾 Duyệt & Lưu lịch ngay</span>
+          {/* Đơn giá & Số buổi đăng ký */}
+          <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Đơn giá 1 buổi (VNĐ) *
               </label>
-            </div>
-          ) : (
-            <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 flex items-center gap-3 text-xs text-amber-900">
-              <Bell className="w-5 h-5 text-amber-600 shrink-0" />
-              <span>
-                <strong>Bắt buộc báo Admin:</strong> Lịch học theo ngày cụ thể ({specificDates.length} ngày) sẽ được gửi đến Admin Hệ Thống để kiểm tra sân, ca và bấm xác nhận lưu lịch.
-              </span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Trạng thái học phí</label>
-              <select
-                value={newPaymentStatus}
-                onChange={e => setNewPaymentStatus(e.target.value as any)}
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981]"
-              >
-                <option value="Paid">Đã thanh toán đủ (Paid)</option>
-                <option value="Unpaid">Chưa đóng học phí (Unpaid)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Liên hệ khẩn cấp</label>
               <input
-                type="text"
-                value={newEmergency}
-                onChange={e => setNewEmergency(e.target.value)}
-                placeholder="VD: Chị Mai (Vợ) - 0909 888 777"
-                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981]"
+                type="number"
+                min={0}
+                step={10000}
+                required
+                value={newUnitPrice}
+                onChange={e => setNewUnitPrice(Number(e.target.value))}
+                placeholder="VD: 150000"
+                className="w-full px-3 py-2 text-sm font-bold border border-slate-200 rounded-xl outline-none focus:border-[#10B981] bg-white"
               />
             </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Số buổi học đăng ký *
+              </label>
+              <input
+                type="number"
+                min={1}
+                required
+                value={newSessionsCount}
+                onChange={e => setNewSessionsCount(Number(e.target.value))}
+                placeholder="VD: 12"
+                className="w-full px-3 py-2 text-sm font-bold border border-slate-200 rounded-xl outline-none focus:border-[#10B981] bg-white"
+              />
+            </div>
+          </div>
+
+          {/* Automatic Tuition Calculation Card */}
+          {(() => {
+            const currentSessions = Number(newSessionsCount) || 0;
+            const currentTuition = currentSessions * (Number(newUnitPrice) || 0);
+            return (
+              <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50/70 rounded-2xl border border-emerald-200 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-600 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Số buổi học đăng ký:</span>
+                  </span>
+                  <span className="font-extrabold text-emerald-950 bg-emerald-100 px-2 py-0.5 rounded-md">
+                    {currentSessions} buổi {specificDates.length > 0 && `(${specificDates.length} ngày đã chọn)`}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-600">Đơn giá 1 buổi:</span>
+                  <span className="font-bold text-slate-800">
+                    {(Number(newUnitPrice) || 0).toLocaleString('vi-VN')}đ / buổi
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-emerald-200/80 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-black text-slate-700 uppercase block">
+                      Tiền học phí tự động tính:
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      = {currentSessions} buổi × {(Number(newUnitPrice) || 0).toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+                  <span className="text-xl font-black text-[#10B981]">
+                    {currentTuition.toLocaleString('vi-VN')}đ
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Trạng thái học phí ban đầu</label>
+            <select
+              value={newPaymentStatus}
+              onChange={e => setNewPaymentStatus(e.target.value as any)}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] bg-white"
+            >
+              <option value="Unpaid">Chưa đóng học phí (Unpaid)</option>
+              <option value="Paid">Đã thanh toán đủ (Paid)</option>
+            </select>
           </div>
 
           <div>
@@ -1018,17 +950,8 @@ export const StudentsView: React.FC = () => {
               type="submit"
               className="px-5 py-2 text-xs font-bold text-white bg-[#10B981] hover:bg-emerald-600 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
             >
-              {currentUser.role === 'ADMIN' && adminDirectConfirm ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>💾 Lưu & Duyệt Lịch Ngay</span>
-                </>
-              ) : (
-                <>
-                  <Bell className="w-4 h-4" />
-                  <span>🔔 Gửi Yêu Cầu & Lưu Học Viên</span>
-                </>
-              )}
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Lưu Học Viên</span>
             </button>
           </div>
         </form>

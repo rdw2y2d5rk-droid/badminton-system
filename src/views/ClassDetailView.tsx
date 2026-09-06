@@ -28,19 +28,25 @@ export const ClassDetailView: React.FC<ClassDetailViewProps> = ({ classId, onBac
     students,
     sessions,
     navigate,
-    setAttendanceTarget
+    setAttendanceTarget,
+    getClassById
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'schedule' | 'attendance'>('overview');
 
-  const currentClass = classes.find(c => c.id === classId) || classes[0];
-  const classStudents = students.filter(s => s.classId === currentClass.id);
+  const currentClass = getClassById(classId) || classes.find(c => c.id === classId) || classes[0];
+  const classStudents = currentClass.studentIds && currentClass.studentIds.length > 0
+    ? currentClass.studentIds
+        .map(id => students.find(s => s.id === id))
+        .filter((s): s is typeof students[0] => Boolean(s))
+    : students.filter(s => s.classId === currentClass.id);
   const classSessions = sessions.filter(s => s.classId === currentClass.id);
 
   const handleGoAttendance = (sessionId?: string) => {
     setAttendanceTarget({
       classId: currentClass.id,
-      date: '2026-08-28',
+      date: currentClass.startDate || '2026-08-28',
+      facilityId: currentClass.facilityId,
       sessionId
     });
     navigate('attendance');
@@ -74,32 +80,63 @@ export const ClassDetailView: React.FC<ClassDetailViewProps> = ({ classId, onBac
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-100">
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black bg-[#0F172A] text-white px-2.5 py-1 rounded-lg">
-                {currentClass.code}
-              </span>
+              {!currentClass.id.startsWith('CLS_') && (
+                <span className="text-xs font-black bg-[#0F172A] text-white px-2.5 py-1 rounded-lg">
+                  {currentClass.code}
+                </span>
+              )}
               <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
-                {currentClass.name}
+                {currentClass.court} • {currentClass.scheduleDaysText}
               </h1>
               <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                {currentClass.status === 'Active' ? 'Đang hoạt động' : 'Sắp mở'}
+                {currentClass.timeSlot}
               </span>
             </div>
             <p className="text-sm text-slate-500 max-w-2xl">{currentClass.description}</p>
           </div>
 
-          <div className="flex items-center gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100 shrink-0">
-            {currentClass.coachAvatar && (
-              <img
-                src={currentClass.coachAvatar}
-                alt={currentClass.coachName}
-                className="w-12 h-12 rounded-xl object-cover border border-slate-300"
-              />
+          <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100 shrink-0 flex-wrap">
+            {currentClass.coaches && currentClass.coaches.length > 0 ? (
+              currentClass.coaches.map(c => (
+                <div key={c.id} className="flex items-center gap-2.5 bg-white p-2 rounded-xl border border-slate-200">
+                  {c.avatar ? (
+                    <img
+                      src={c.avatar}
+                      alt={c.name}
+                      className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-lg bg-emerald-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                      {c.name.charAt(0)}
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-[10px] font-bold uppercase text-slate-400">Huấn Luyện Viên</div>
+                    <div className="text-xs font-extrabold text-[#0F172A]">{c.name}</div>
+                    <div className="text-[10px] text-emerald-600 font-semibold">{c.specialty || c.phone}</div>
+                  </div>
+                </div>
+              ))
+            ) : currentClass.coachName && currentClass.coachName !== 'Chưa có HLV' ? (
+              <div className="flex items-center gap-3">
+                {currentClass.coachAvatar && (
+                  <img
+                    src={currentClass.coachAvatar}
+                    alt={currentClass.coachName}
+                    className="w-10 h-10 rounded-xl object-cover border border-slate-300"
+                  />
+                )}
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Huấn Luyện Viên</div>
+                  <div className="text-sm font-extrabold text-[#0F172A]">{currentClass.coachName}</div>
+                  <div className="text-xs text-[#10B981] font-semibold">BWF Certified Coach</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl font-semibold">
+                Chưa có HLV phụ trách
+              </div>
             )}
-            <div>
-              <div className="text-[11px] font-bold uppercase text-slate-400">Huấn Luyện Viên</div>
-              <div className="text-sm font-extrabold text-[#0F172A]">{currentClass.coachName}</div>
-              <div className="text-xs text-[#10B981] font-semibold">BWF Certified Coach</div>
-            </div>
           </div>
         </div>
 

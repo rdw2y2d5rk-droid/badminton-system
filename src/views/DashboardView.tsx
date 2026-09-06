@@ -43,13 +43,26 @@ export const DashboardView: React.FC = () => {
   const todayStr = '2026-08-28';
   const todayDateFormatted = 'Thứ Sáu, 28 Tháng 08, 2026';
 
-  // Today's sessions
-  const todaySessions = sessions.filter(s => s.date === todayStr);
+  // Today's sessions:
+  // - Quản lý sân: Chỉ xem các ca tại sân của mình
+  // - Admin: Xem toàn bộ ca trong ngày
+  const todaySessions = sessions.filter(s => {
+    if (s.date !== todayStr) return false;
+    if (currentUser.role === 'FACILITY_MANAGER' && currentUser.facilityId) {
+      return s.facilityId === currentUser.facilityId || (!s.facilityId && currentUser.facilityId === 'CS01');
+    }
+    return true;
+  });
 
-  // Coach-specific stats
+  // Coach-specific stats (HLV chỉ nhìn ca của mình)
   const coachClasses = classes.filter(c => c.coachId === currentUser.coachId);
   const coachStudents = students.filter(s => s.coachId === currentUser.coachId);
-  const coachTodaySessions = todaySessions.filter(s => s.coachId === currentUser.coachId);
+  const coachTodaySessions = todaySessions.filter(
+    s =>
+      s.coachId === (currentUser.coachId || currentUser.id) ||
+      s.coachName === currentUser.name ||
+      (s.coaches && s.coaches.some(c => c.id === (currentUser.coachId || currentUser.id) || c.name === currentUser.name))
+  );
   const currentCoachData = coaches.find(c => c.id === currentUser.coachId);
 
   // Alerts calculation
@@ -208,7 +221,7 @@ export const DashboardView: React.FC = () => {
                       {session.attendanceDone ? (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
                           <CheckCircle2 className="w-3.5 h-3.5 text-[#10B981]" />
-                          <span>Đã điểm danh</span>
+                          <span>{session.attendedByRole === 'COACH' ? 'GV đã điểm danh' : 'Đã điểm danh'}</span>
                         </div>
                       ) : (
                         <button
@@ -256,7 +269,7 @@ export const DashboardView: React.FC = () => {
                         <div>
                           <div className="text-xs font-bold text-[#0F172A]">{student.name}</div>
                           <div className="text-[11px] text-amber-800">
-                            {student.className} • {student.remainingSessions === 0 ? 'Đã hết buổi' : `Còn ${student.remainingSessions} buổi`}
+                            {student.className || 'Chưa xếp lớp'} • {student.remainingSessions === 0 ? 'Đã hết buổi' : `Còn ${student.remainingSessions} buổi`}
                           </div>
                         </div>
                       </div>
@@ -469,45 +482,47 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
 
-          {/* Sân Cầu Lông Trực Thuộc (Courts Grid) */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-bold text-base text-[#0F172A]">Tình trạng sân cầu lông</h3>
-                <p className="text-xs text-slate-400">Các cơ sở & sân tập trực thuộc hệ thống</p>
+          {/* Sân Cầu Lông Trực Thuộc (Courts Grid) - Chỉ hiển thị cho ADMIN */}
+          {currentUser.role === 'ADMIN' && (
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-base text-[#0F172A]">Tình trạng sân cầu lông</h3>
+                  <p className="text-xs text-slate-400">Các cơ sở & sân tập trực thuộc hệ thống</p>
+                </div>
+                <button
+                  onClick={() => navigate('facilities')}
+                  className="text-xs text-[#10B981] font-bold hover:underline flex items-center gap-1.5 cursor-pointer"
+                >
+                  Quản lý sân →
+                </button>
               </div>
-              <button
-                onClick={() => navigate('facilities')}
-                className="text-xs text-[#10B981] font-bold hover:underline flex items-center gap-1.5 cursor-pointer"
-              >
-                Quản lý sân →
-              </button>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {facilities.map((court) => {
-                const courtClasses = classes.filter(c => c.facilityId === court.id || c.court === court.name);
-                return (
-                  <div
-                    key={court.id}
-                    onClick={() => navigate('facilities')}
-                    className="p-3.5 rounded-2xl border bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 border-slate-100 text-slate-700 transition-all cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-bold text-[#0F172A] truncate">{court.name}</div>
-                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {facilities.map((court) => {
+                  const courtClasses = classes.filter(c => c.facilityId === court.id || c.court === court.name);
+                  return (
+                    <div
+                      key={court.id}
+                      onClick={() => navigate('facilities')}
+                      className="p-3.5 rounded-2xl border bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 border-slate-100 text-slate-700 transition-all cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-[#0F172A] truncate">{court.name}</div>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      </div>
+                      <div className="text-[11px] font-bold mt-1 text-[#10B981] truncate">
+                        {courtClasses.length} lớp học tại sân
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                        QL: {court.managerName || 'Nguyễn Văn Thắng'}
+                      </div>
                     </div>
-                    <div className="text-[11px] font-bold mt-1 text-[#10B981] truncate">
-                      {courtClasses.length} lớp học tại sân
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-                      QL: {court.managerName || 'Nguyễn Văn Thắng'}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right 1 Col: CẢNH BÁO + DARK HIGHLIGHT CARD */}
@@ -520,7 +535,7 @@ export const DashboardView: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {pendingScheduleCount > 0 && (
+              {currentUser.role === 'ADMIN' && pendingScheduleCount > 0 && (
                 <div
                   onClick={() => navigate('schedule')}
                   className="flex items-center gap-3 p-3.5 bg-amber-50 hover:bg-amber-100/70 rounded-2xl border border-amber-200 cursor-pointer transition-colors animate-pulse"

@@ -138,7 +138,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen = f
                                   </span>
                                 </div>
                                 <div className="text-xs text-slate-500">
-                                  {student.className} • {student.phone} • Còn {student.remainingSessions}/{student.packageSessions} buổi
+                                  {student.className || 'Chưa xếp lớp'} • {student.phone} • Còn {student.remainingSessions}/{student.packageSessions} buổi
                                 </div>
                               </div>
                             </div>

@@ -66,6 +66,8 @@ export interface BadmintonClass {
   coachId: string;
   coachName: string;
   coachAvatar?: string;
+  coachIds?: string[];
+  coaches?: Coach[];
   shiftId?: string;
   scheduleDays: string[]; // e.g. ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
   scheduleDaysText: string; // "T2 - CN"
@@ -106,10 +108,10 @@ export interface Student {
   phone: string;
   email: string;
   avatar: string;
-  classId: string;
-  className: string;
-  coachId: string;
-  coachName: string;
+  classId?: string;
+  className?: string;
+  coachId?: string;
+  coachName?: string;
 
   // Lịch học theo ngày cụ thể trong tháng (không cố định thứ nữa)
   specificDates?: string[]; // e.g. ['2026-08-03', '2026-08-05', '2026-08-10', ...]
@@ -135,8 +137,8 @@ export interface Student {
   startDate?: string;
   endDate?: string;
 
-  // Quản lý gói buổi & Quy luật tính phép (4 buổi = 1 phép)
   packageSessions: number;
+  tuitionFee?: number; // Tiền học phí tự động tính = số buổi * đơn giá
   attendedSessions: number;
   remainingSessions: number;
   allowedLeaves?: number;
@@ -147,7 +149,7 @@ export interface Student {
   paymentStatus: PaymentStatus;
   status: StudentStatus;
   joinedDate: string;
-  emergencyContact: string;
+  emergencyContact?: string;
   note?: string;
   lastAttended?: string;
   skillLevel: SkillLevel;
@@ -170,6 +172,10 @@ export interface Coach {
   status: 'Active' | 'OnLeave';
   assignedClassIds: string[];
   facilityIds?: string[]; // Cơ sở giảng dạy
+  assignedFacilityId?: string; // Cơ sở / Sân do Admin phân công
+  assignedFacilityName?: string;
+  assignedShiftId?: string; // Ca dạy do Admin phân công
+  assignedShiftName?: string;
   rating: number;
   joinedDate: string;
   hourlyRate: number;
@@ -192,10 +198,16 @@ export interface AttendanceRecordItem {
 }
 
 export interface CoachAttendanceRecord {
-  status: 'Present' | 'Absent' | 'Substituted';
+  coachId?: string;
+  coachName?: string;
+  status: 'Present' | 'Absent' | 'Late' | 'Substituted';
+  lateMinutes?: number; // Số phút đi muộn nếu status là Late
   substituteCoachId?: string;
   substituteCoachName?: string;
   note?: string;
+  checkedBy?: string; // Tên người điểm danh (Quản lý sân / Admin)
+  checkedByRole?: UserRole;
+  checkedAt?: string;
 }
 
 export interface SessionSchedule {
@@ -217,6 +229,10 @@ export interface SessionSchedule {
   timeSlot: string; // "18:00 - 19:30"
   status: SessionStatus;
   attendanceDone: boolean;
+  attendedBy?: string; // Tên người đã điểm danh học viên (VD: HLV Nguyễn Minh Anh)
+  attendedByRole?: UserRole; // 'COACH' | 'FACILITY_MANAGER' | 'ADMIN'
+  attendedAt?: string;
+  coachAttendanceDone?: boolean; // Quản lý sân / Admin đã chấm công HLV
   totalStudents: number;
   coachAttendance?: CoachAttendanceRecord;
   attendanceRecords?: AttendanceRecordItem[];

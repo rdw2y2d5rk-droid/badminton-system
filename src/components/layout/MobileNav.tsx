@@ -32,6 +32,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
     currentUser,
     switchUser,
     isCoach,
+    isFacilityManager,
     sessions,
     assignedSessions,
     notifications
@@ -40,14 +41,14 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const unreadNotifCount = notifications.filter(n => !n.read).length;
-  const targetSessions = isCoach ? assignedSessions : sessions;
+  const targetSessions = (isCoach || isFacilityManager) ? assignedSessions : sessions;
   const pendingAttendanceCount = targetSessions.filter(
     s => s.date === '2026-08-28' && !s.attendanceDone
   ).length;
 
   const mobileNavItems = [
     { id: 'dashboard', label: 'Trang chủ', icon: LayoutDashboard },
-    { id: 'schedule', label: 'Lịch học', icon: Calendar },
+    { id: 'schedule', label: isCoach ? 'Lịch dạy' : 'Lịch học', icon: Calendar },
     {
       id: 'attendance',
       label: 'Điểm danh',
@@ -169,18 +170,18 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
             <nav className="flex-1 overflow-y-auto space-y-1">
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-                ...(currentUser.role === 'ADMIN' || currentUser.role === 'FACILITY_MANAGER'
-                  ? [
-                      { id: 'facilities', label: 'Cơ sở & Sân', icon: MapPin },
-                      { id: 'shifts', label: 'Ca học', icon: Clock }
-                    ]
+                ...(currentUser.role === 'ADMIN'
+                  ? [{ id: 'facilities', label: 'Cơ sở & Sân', icon: MapPin }]
+                  : []),
+                ...(currentUser.role === 'ADMIN'
+                  ? [{ id: 'shifts', label: 'Ca học', icon: Clock }]
                   : []),
                 { id: 'classes', label: 'Lớp học', icon: BookOpen },
                 { id: 'students', label: 'Học viên', icon: User },
                 ...(currentUser.role === 'ADMIN'
                   ? [{ id: 'coaches', label: 'Huấn luyện viên', icon: UserCheck }]
                   : []),
-                { id: 'schedule', label: 'Lịch học', icon: Calendar },
+                { id: 'schedule', label: isCoach ? 'Lịch dạy' : 'Lịch học', icon: Calendar },
                 { id: 'attendance', label: 'Điểm danh', icon: CheckSquare },
                 ...(currentUser.role === 'ADMIN' || currentUser.role === 'FACILITY_MANAGER'
                   ? [{ id: 'payments', label: 'Học phí & Thu ngân', icon: CreditCard }]

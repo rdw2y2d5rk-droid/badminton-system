@@ -79,9 +79,11 @@ export const MonthlyAttendanceMatrix: React.FC = () => {
         student.phone.includes(searchQuery);
 
       const matchesFacility =
-        selectedFacility === 'ALL' ||
-        student.facilityId === selectedFacility ||
-        student.facilityName === facilities.find(f => f.id === selectedFacility)?.name;
+        currentUser.role === 'FACILITY_MANAGER'
+          ? (currentUser.facilityId ? student.facilityId === currentUser.facilityId : true)
+          : (selectedFacility === 'ALL' ||
+             student.facilityId === selectedFacility ||
+             student.facilityName === facilities.find(f => f.id === selectedFacility)?.name);
 
       const matchesShift =
         selectedShift === 'ALL' ||
@@ -95,7 +97,7 @@ export const MonthlyAttendanceMatrix: React.FC = () => {
 
       return matchesSearch && matchesFacility && matchesShift && matchesScheduleStatus;
     });
-  }, [baseStudents, searchQuery, selectedFacility, selectedShift, selectedScheduleStatus, facilities]);
+  }, [baseStudents, searchQuery, selectedFacility, selectedShift, selectedScheduleStatus, facilities, currentUser]);
 
   // Compute "TỔNG ĐĂNG KÝ THEO NGÀY" (Count students scheduled on each day of month)
   const dayRegistrationCounts = useMemo(() => {
@@ -136,11 +138,24 @@ export const MonthlyAttendanceMatrix: React.FC = () => {
     const current = getAttendanceForStudentDate(studentId, dateStr);
     const localKey = `${studentId}_${dateStr}`;
 
+    const student = students.find(s => s.id === studentId);
+    const maxLeaves = student ? (student.allowedLeaves ?? Math.floor((student.packageSessions || 12) / 4)) : 3;
+    const isOutOfLeaves = student ? (student.usedLeaves || 0) >= maxLeaves : false;
+
     let nextStatus: AttendanceStatus;
     if (current === 'Scheduled' || current === 'None') {
       nextStatus = 'Present';
     } else if (current === 'Present') {
-      nextStatus = 'Excused';
+      // RULE: nếu hết phép thì chỉ có thể chuyển thành vắng, không thể chuyển sang có phép được
+      if (isOutOfLeaves) {
+        nextStatus = 'Absent';
+        showToast(
+          `Học viên ${studentName} đã hết phép tháng (${student?.usedLeaves || 0}/${maxLeaves} phép). Chỉ có thể chuyển sang VẮNG!`,
+          'warning'
+        );
+      } else {
+        nextStatus = 'Excused';
+      }
     } else if (current === 'Excused') {
       nextStatus = 'Absent';
     } else {
@@ -157,7 +172,9 @@ export const MonthlyAttendanceMatrix: React.FC = () => {
       Excused: 'Nghỉ có phép (P)',
       Absent: 'Vắng không phép (K)'
     };
-    showToast(`${studentName} [${dateStr.split('-').reverse().join('/')}]: ${statusLabels[nextStatus]}`, 'info');
+    if (!isOutOfLeaves || current !== 'Present') {
+      showToast(`${studentName} [${dateStr.split('-').reverse().join('/')}]: ${statusLabels[nextStatus]}`, 'info');
+    }
   };
 
   // Export Matrix to CSV
@@ -262,19 +279,21 @@ export const MonthlyAttendanceMatrix: React.FC = () => {
         {/* Filters */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Sân Cầu Lông */}
-            <select
-              value={selectedFacility}
-              onChange={e => setSelectedFacility(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
-            >
-              <option value="ALL">Tất cả sân cầu lông</option>
-              {facilities.map(f => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
+            {/* Sân Cầu Lông - Ẩn đối với Quản lý sân */}
+            {currentUser.role !== 'FACILITY_MANAGER' && (
+              <select
+                value={selectedFacility}
+                onChange={e => setSelectedFacility(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
+              >
+                <option value="ALL">Tất cả sân cầu lông</option>
+                {facilities.map(f => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {/* Ca học */}
             <select
@@ -290,16 +309,18 @@ export const MonthlyAttendanceMatrix: React.FC = () => {
               ))}
             </select>
 
-            {/* Trạng thái duyệt lịch */}
-            <select
-              value={selectedScheduleStatus}
-              onChange={e => setSelectedScheduleStatus(e.target.value as any)}
-              className="px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
-            >
-              <option value="ALL">Tất cả trạng thái lịch</option>
-              <option value="confirmed">Đã Admin lưu lịch (✓)</option>
-              <option value="pending_admin">Chờ Admin lưu lịch (⏳)</option>
-            </select>
+            {/* Trạng thái duyệt lịch - Chỉ Admin */}
+            {currentUser.role === 'ADMIN' && (
+              <select
+                value={selectedScheduleStatus}
+                onChange={e => setSelectedScheduleStatus(e.target.value as any)}
+                className="px-3 py-1.5 bg-slate-50 text-xs font-bold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
+              >
+                <option value="ALL">Tất cả trạng thái lịch</option>
+                <option value="confirmed">Đã Admin lưu lịch (✓)</option>
+                <option value="pending_admin">Chờ Admin lưu lịch (⏳)</option>
+              </select>
+            )}
           </div>
 
           <div className="relative w-full sm:w-64">
@@ -596,7 +617,7 @@ export const MonthlyAttendanceMatrix: React.FC = () => {
           </div>
 
           <div className="text-slate-400 text-[11px] italic">
-            💡 Mẹo: Nhấp chuột vào bất kỳ ô ngày nào để chuyển đổi nhanh trạng thái: Có mặt → Phép → Vắng.
+            💡 Mẹo: Nhấp chuột vào bất kỳ ô ngày nào để chuyển đổi nhanh trạng thái: Có mặt → Phép (nếu còn phép) → Vắng.
           </div>
         </div>
       </div>

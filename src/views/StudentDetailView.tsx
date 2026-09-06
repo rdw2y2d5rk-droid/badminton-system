@@ -19,11 +19,13 @@ import {
   Building2,
   RotateCw,
   CalendarCheck,
-  Sparkles
+  Sparkles,
+  Check
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AttendanceStatusBadge, PaymentBadge, StudentStatusBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
+import { PaymentItem } from '../types';
 
 interface StudentDetailViewProps {
   studentId: string;
@@ -35,29 +37,92 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
     students,
     classes,
     payments,
+    sessionUnitPrice,
     addSessionsToStudent,
     renewStudentMonth,
     confirmPayment,
-    confirmStudentSchedule,
+    editStudent,
     currentUser,
     isCoach,
     navigate
   } = useApp();
 
+  const canConfirmPayment = currentUser.role === 'ADMIN' || currentUser.role === 'FACILITY_MANAGER';
+
   const [activeTab, setActiveTab] = useState<'profile' | 'attendance' | 'payments'>('profile');
   const [isAddSessionModalOpen, setIsAddSessionModalOpen] = useState(false);
   const [extraSessionsCount, setExtraSessionsCount] = useState(12);
 
+  // Confirm Payment Modal State
+  const [confirmingPayment, setConfirmingPayment] = useState<PaymentItem | null>(null);
+  const [confirmMethod, setConfirmMethod] = useState<'Chuyển khoản QR' | 'Tiền mặt' | 'Thẻ ngân hàng' | 'Ví MoMo'>('Chuyển khoản QR');
+  const [confirmNote, setConfirmNote] = useState('');
+
+  // Assign/Change Class Modal State
+  const [isAssignClassModalOpen, setIsAssignClassModalOpen] = useState(false);
+  const [targetAssignClassId, setTargetAssignClassId] = useState(classes[0]?.id || '');
+
   // Monthly Renewal Modal State
   const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
-  const [renewMonth, setRenewMonth] = useState('Tháng 09/2026');
+  const [renewMonthRaw, setRenewMonthRaw] = useState('2026-09'); // YYYY-MM
   const [renewStartDate, setRenewStartDate] = useState('2026-09-01');
   const [renewEndDate, setRenewEndDate] = useState('2026-09-30');
-  const [renewPackageSessions, setRenewPackageSessions] = useState(12);
+  const [renewSpecificDates, setRenewSpecificDates] = useState<string[]>([
+    '2026-09-02', '2026-09-04', '2026-09-07', '2026-09-09', '2026-09-11', '2026-09-14',
+    '2026-09-16', '2026-09-18', '2026-09-21', '2026-09-23', '2026-09-25', '2026-09-28'
+  ]);
+  const [renewUnitPrice, setRenewUnitPrice] = useState<number>(sessionUnitPrice || 150000);
+  const [renewSessionsCount, setRenewSessionsCount] = useState<number>(12);
 
   const currentStudent = students.find(s => s.id === studentId) || students[0];
   const studentPayments = payments.filter(p => p.studentId === currentStudent.id);
   const studentClass = classes.find(c => c.id === currentStudent.classId);
+
+  const handleRenewMonthChange = (monthVal: string) => {
+    setRenewMonthRaw(monthVal);
+    if (!monthVal) return;
+    const [y, m] = monthVal.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    setRenewStartDate(`${monthVal}-01`);
+    setRenewEndDate(`${monthVal}-${String(lastDay).padStart(2, '0')}`);
+  };
+
+  const toggleRenewDate = (dateStr: string) => {
+    setRenewSpecificDates(prev => {
+      const next = prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort();
+      setRenewSessionsCount(next.length > 0 ? next.length : 12);
+      return next;
+    });
+  };
+
+  const applyRenewQuickPreset = (preset: 'all' | 'weekdays' | 'weekend' | 'clear') => {
+    if (!renewMonthRaw) return;
+    const [year, month] = renewMonthRaw.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const result: string[] = [];
+
+    if (preset === 'clear') {
+      setRenewSpecificDates([]);
+      setRenewSessionsCount(12);
+      return;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dObj = new Date(year, month - 1, day);
+      const dayOfWeek = dObj.getDay();
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+      if (preset === 'all') {
+        result.push(dateStr);
+      } else if (preset === 'weekdays' && dayOfWeek >= 1 && dayOfWeek <= 5) {
+        result.push(dateStr);
+      } else if (preset === 'weekend' && (dayOfWeek === 0 || dayOfWeek === 6)) {
+        result.push(dateStr);
+      }
+    }
+    setRenewSpecificDates(result);
+    setRenewSessionsCount(result.length > 0 ? result.length : 12);
+  };
 
   const handleConfirmAddSessions = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,14 +137,45 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
 
   const handleConfirmRenew = (e: React.FormEvent) => {
     e.preventDefault();
+    const [y, m] = (renewMonthRaw || '2026-09').split('-');
+    const renewMonthStr = `Tháng ${m}/${y}`;
+    const sessions = Number(renewSessionsCount) || (renewSpecificDates.length > 0 ? renewSpecificDates.length : 12);
+    const unitPrice = Number(renewUnitPrice) || sessionUnitPrice || 150000;
+    const tuition = sessions * unitPrice;
+
     renewStudentMonth(
       currentStudent.id,
-      Number(renewPackageSessions),
-      renewMonth,
+      sessions,
+      renewMonthStr,
       renewStartDate,
-      renewEndDate
+      renewEndDate,
+      renewSpecificDates,
+      tuition
     );
     setIsRenewModalOpen(false);
+  };
+
+  const handleConfirmAssignClass = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (targetAssignClassId === 'UNASSIGN') {
+      editStudent(currentStudent.id, {
+        classId: '',
+        className: 'Chưa xếp lớp',
+        coachId: '',
+        coachName: 'Chưa phân công'
+      });
+    } else {
+      const cls = classes.find(c => c.id === targetAssignClassId);
+      if (cls) {
+        editStudent(currentStudent.id, {
+          classId: cls.id,
+          className: cls.name,
+          coachId: cls.coachId,
+          coachName: cls.coachName
+        });
+      }
+    }
+    setIsAssignClassModalOpen(false);
   };
 
   return (
@@ -154,16 +250,34 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
           <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 shrink-0">
             <div className="space-y-1">
               <div className="text-xs text-slate-400 font-semibold uppercase">Lớp đang theo học</div>
-              <div
-                onClick={() => navigate('classes', currentStudent.classId)}
-                className="text-base font-extrabold text-[#0F172A] hover:text-[#10B981] cursor-pointer flex items-center gap-1 transition-colors"
-              >
-                {currentStudent.className}
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </div>
+              {currentStudent.classId ? (
+                <div
+                  onClick={() => navigate('classes', currentStudent.classId)}
+                  className="text-base font-extrabold text-[#0F172A] hover:text-[#10B981] cursor-pointer flex items-center gap-1 transition-colors"
+                >
+                  {currentStudent.className}
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </div>
+              ) : (
+                <div className="text-base font-bold text-slate-400">
+                  {currentStudent.className || 'Chưa xếp lớp'}
+                </div>
+              )}
               <div className="text-xs text-slate-500">
-                HLV: <strong className="text-slate-800">{currentStudent.coachName}</strong>
+                HLV: <strong className="text-slate-800">{currentStudent.coachName || 'Chưa phân công'}</strong>
               </div>
+              {!isCoach && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetAssignClassId(currentStudent.classId || classes[0]?.id || '');
+                    setIsAssignClassModalOpen(true);
+                  }}
+                  className="mt-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 underline block cursor-pointer"
+                >
+                  {currentStudent.classId ? 'Chuyển lớp khác' : '+ Gán vào lớp học'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -254,28 +368,6 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
                 <span className="font-bold text-emerald-300">
                   {currentStudent.fixedShiftName || currentStudent.shiftName || 'Ca Tối 1'}
                 </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Trạng thái duyệt lịch:</span>
-                {currentStudent.scheduleStatus === 'pending_admin' ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                      Chờ Admin duyệt lịch
-                    </span>
-                    {currentUser.role === 'ADMIN' && (
-                      <button
-                        onClick={() => confirmStudentSchedule(currentStudent.id)}
-                        className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded shadow-xs cursor-pointer"
-                      >
-                        ✓ Duyệt Ngay
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                    ✓ Lịch đã xác nhận
-                  </span>
-                )}
               </div>
 
               {/* Specific Dates List */}
@@ -372,10 +464,12 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
                 <span className="text-slate-500 font-medium">Họ và tên:</span>
                 <strong className="text-[#0F172A]">{currentStudent.name}</strong>
               </div>
-              <div className="flex justify-between pt-2">
-                <span className="text-slate-500 font-medium">Mã học viên:</span>
-                <strong className="text-[#0F172A]">{currentStudent.code}</strong>
-              </div>
+              {currentUser.role !== 'ADMIN' && (
+                <div className="flex justify-between pt-2">
+                  <span className="text-slate-500 font-medium">Mã học viên:</span>
+                  <strong className="text-[#0F172A]">{currentStudent.code}</strong>
+                </div>
+              )}
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500 font-medium">Số điện thoại:</span>
                 <strong className="text-[#0F172A]">{currentStudent.phone}</strong>
@@ -383,10 +477,6 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500 font-medium">Email:</span>
                 <strong className="text-[#0F172A]">{currentStudent.email}</strong>
-              </div>
-              <div className="flex justify-between pt-2">
-                <span className="text-slate-500 font-medium">Liên hệ khẩn cấp:</span>
-                <strong className="text-[#0F172A]">{currentStudent.emergencyContact || 'Chưa cập nhật'}</strong>
               </div>
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500 font-medium">Ngày gia nhập:</span>
@@ -521,13 +611,29 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
                       <PaymentBadge status={p.status} />
                     </td>
                     <td className="py-3.5 px-5 text-right">
-                      {p.status !== 'Paid' && (
-                        <button
-                          onClick={() => confirmPayment(p.id)}
-                          className="px-3 py-1 bg-[#10B981] text-white font-bold text-xs rounded-lg hover:bg-emerald-600 transition-colors cursor-pointer"
-                        >
-                          Xác nhận đã thu
-                        </button>
+                      {p.status !== 'Paid' ? (
+                        canConfirmPayment ? (
+                          <button
+                            onClick={() => {
+                              setConfirmingPayment(p);
+                              setConfirmMethod(p.method || 'Chuyển khoản QR');
+                              setConfirmNote('');
+                            }}
+                            className="px-3 py-1 bg-[#10B981] text-white font-bold text-xs rounded-lg hover:bg-emerald-600 active:scale-95 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Xác nhận đã thu</span>
+                          </button>
+                        ) : (
+                          <span className="text-xs font-semibold text-slate-400">Chờ thu</span>
+                        )
+                      ) : (
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-emerald-700 block">Đã thu</span>
+                          {p.collectorName && (
+                            <span className="text-[10px] text-slate-400 block">{p.collectorName}</span>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -593,36 +699,51 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
         title={`Gia Hạn Kỳ Học Mới: ${currentStudent.name}`}
         subtitle="Tự động bảo lưu số buổi còn lại và cấp lại số ngày nghỉ phép mới theo quy định"
       >
-        <form onSubmit={handleConfirmRenew} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <form onSubmit={handleConfirmRenew} className="space-y-4 max-h-[75vh] overflow-y-auto no-scrollbar pr-1">
+          {/* Month, Unit price & Sessions */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Kỳ / Tháng mới *
               </label>
               <input
-                type="text"
-                value={renewMonth}
-                onChange={e => setRenewMonth(e.target.value)}
-                placeholder="VD: Tháng 09/2026"
-                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold"
+                type="month"
+                value={renewMonthRaw}
+                onChange={e => handleRenewMonthChange(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold bg-white"
                 required
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Gói buổi học đăng ký kỳ mới *
+                Đơn giá 1 buổi (VNĐ) *
               </label>
-              <select
-                value={renewPackageSessions}
-                onChange={e => setRenewPackageSessions(Number(e.target.value))}
-                className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold"
-              >
-                <option value={12}>12 buổi (Khoảng 1 tháng - 1.800.000đ)</option>
-                <option value={16}>16 buổi (Khoảng 1.5 tháng - 2.400.000đ)</option>
-                <option value={24}>24 buổi (Khoảng 2 tháng - 3.400.000đ)</option>
-                <option value={36}>36 buổi (Khoảng 3 tháng - 4.800.000đ)</option>
-              </select>
+              <input
+                type="number"
+                min={0}
+                step={10000}
+                value={renewUnitPrice}
+                onChange={e => setRenewUnitPrice(Number(e.target.value))}
+                placeholder="VD: 150000"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold bg-white"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Số buổi học kỳ mới *
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={renewSessionsCount}
+                onChange={e => setRenewSessionsCount(Number(e.target.value))}
+                placeholder="VD: 12"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold bg-white"
+                required
+              />
             </div>
           </div>
 
@@ -651,6 +772,134 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
             </div>
           </div>
 
+          {/* Interactive Month Mini-Calendar Picker */}
+          <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <label className="block text-xs font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  <span>Chọn Các Ngày Sẽ Học Trong Tháng (Kỳ Mới) *</span>
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Click vào từng ngày học viên muốn học linh hoạt trong tháng
+                </p>
+              </div>
+
+              <span className="text-xs font-bold text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
+                Tháng {renewMonthRaw ? renewMonthRaw.split('-')[1] + '/' + renewMonthRaw.split('-')[0] : '09/2026'}
+              </span>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-emerald-100">
+              <span className="text-[11px] font-bold text-slate-500 mr-1">Gợi ý nhanh:</span>
+              <button
+                type="button"
+                onClick={() => applyRenewQuickPreset('all')}
+                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+              >
+                ⚡ Cả tuần (T2 - CN)
+              </button>
+              <button
+                type="button"
+                onClick={() => applyRenewQuickPreset('weekdays')}
+                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+              >
+                ⚡ Ngày thường (T2 - T6)
+              </button>
+              <button
+                type="button"
+                onClick={() => applyRenewQuickPreset('weekend')}
+                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+              >
+                ⚡ Cuối tuần (T7 - CN)
+              </button>
+              <button
+                type="button"
+                onClick={() => applyRenewQuickPreset('clear')}
+                className="px-2.5 py-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors cursor-pointer ml-auto"
+              >
+                ✕ Xoá chọn
+              </button>
+            </div>
+
+            {/* Mini-Calendar Days Grid */}
+            <div className="bg-white p-3 rounded-xl border border-emerald-200/80 shadow-xs">
+              <div className="grid grid-cols-7 gap-1 text-center mb-1.5 pb-1 border-b border-slate-100">
+                {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w, idx) => (
+                  <div key={w} className={`text-[10px] font-bold ${idx >= 5 ? 'text-rose-500' : 'text-slate-500'}`}>
+                    {w}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {/* Blank days before day 1 */}
+                {(() => {
+                  if (!renewMonthRaw) return null;
+                  const [y, m] = renewMonthRaw.split('-').map(Number);
+                  const firstDay = new Date(y, m - 1, 1).getDay(); // 0 = Sun
+                  const offset = firstDay === 0 ? 6 : firstDay - 1; // Mon = 0
+                  const blanks = [];
+                  for (let i = 0; i < offset; i++) {
+                    blanks.push(<div key={`blank-${i}`} className="h-8" />);
+                  }
+                  return blanks;
+                })()}
+
+                {/* Days of Month */}
+                {(() => {
+                  if (!renewMonthRaw) return null;
+                  const [y, m] = renewMonthRaw.split('-').map(Number);
+                  const daysInMonth = new Date(y, m, 0).getDate();
+                  const dayElements = [];
+                  for (let d = 1; d <= daysInMonth; d++) {
+                    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const isSelected = renewSpecificDates.includes(dateStr);
+                    const dayOfWeek = new Date(y, m - 1, d).getDay();
+                    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                    dayElements.push(
+                      <button
+                        type="button"
+                        key={dateStr}
+                        onClick={() => toggleRenewDate(dateStr)}
+                        className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer select-none ${
+                          isSelected
+                            ? 'bg-[#10B981] text-white shadow-xs ring-1 ring-emerald-500 scale-105'
+                            : isWeekend
+                            ? 'bg-slate-50 text-rose-500 hover:bg-emerald-50 hover:text-emerald-700'
+                            : 'bg-slate-50 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
+                        }`}
+                        title={isSelected ? `Đã chọn ngày ${d}` : `Click để chọn ngày ${d}`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  }
+                  return dayElements;
+                })()}
+              </div>
+            </div>
+
+            {/* Dynamic summary */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 font-bold rounded-lg flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  Đã chọn: {renewSpecificDates.length} ngày học
+                </span>
+                <span className="px-2.5 py-1 bg-sky-100 text-sky-900 font-bold rounded-lg">
+                  Số buổi đăng ký: {renewSessionsCount} buổi
+                </span>
+                <span className="px-2.5 py-1 bg-amber-100 text-amber-900 font-bold rounded-lg flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  Quỹ phép mới: {Math.floor((Number(renewSessionsCount) || 0) / 4)} ngày
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Rollover & Leave Calculation Preview */}
           <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 space-y-2.5 text-xs">
             <div className="font-bold text-emerald-950 flex items-center gap-1.5">
@@ -666,9 +915,9 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
                 </span>
               </div>
               <div className="p-2 bg-white/80 rounded-xl border border-emerald-100">
-                <span className="text-slate-500 block text-[11px]">Buổi gói mới nạp:</span>
+                <span className="text-slate-500 block text-[11px]">Buổi kỳ mới đăng ký:</span>
                 <span className="text-sm font-extrabold text-emerald-600">
-                  +{renewPackageSessions} buổi
+                  +{renewSessionsCount} buổi
                 </span>
               </div>
             </div>
@@ -677,19 +926,34 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
               <div>
                 <span className="text-[11px] text-emerald-100 block">Tổng buổi khả dụng kỳ mới:</span>
                 <span className="text-lg font-black tracking-tight">
-                  {currentStudent.remainingSessions + Number(renewPackageSessions)} Buổi Tập
+                  {currentStudent.remainingSessions + Number(renewSessionsCount)} Buổi Tập
                 </span>
               </div>
               <div className="text-right">
                 <span className="text-[11px] text-emerald-100 block">Phép nghỉ mới (4 buổi = 1 phép):</span>
                 <span className="text-base font-black text-amber-300">
-                  {Math.floor(Number(renewPackageSessions) / 4)} Ngày phép
+                  {Math.floor(Number(renewSessionsCount) / 4)} Ngày phép
                 </span>
               </div>
             </div>
 
+            {/* Tuition Calculation Card */}
+            <div className="p-3 bg-white/90 rounded-xl border border-emerald-200 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-black text-slate-700 uppercase block">
+                  Tiền học phí kỳ mới tự động tính:
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  = {renewSessionsCount} buổi × {(Number(renewUnitPrice) || 0).toLocaleString('vi-VN')}đ
+                </span>
+              </div>
+              <span className="text-xl font-black text-[#10B981]">
+                {((Number(renewSessionsCount) || 0) * (Number(renewUnitPrice) || 0)).toLocaleString('vi-VN')}đ
+              </span>
+            </div>
+
             <p className="text-[11px] text-emerald-800 italic leading-snug">
-              * Hệ thống sẽ tự động tạo hóa đơn học phí mới ({renewMonth}), đưa trạng thái học phí về &quot;Chưa đóng&quot; và reset số ngày phép đã sử dụng về 0.
+              * Hệ thống sẽ tự động tạo hóa đơn học phí mới ({renewMonthRaw ? `Tháng ${renewMonthRaw.split('-')[1]}/${renewMonthRaw.split('-')[0]}` : 'kỳ mới'}), đưa trạng thái học phí về &quot;Chưa đóng&quot; và reset số ngày phép đã sử dụng về 0.
             </p>
           </div>
 
@@ -710,6 +974,167 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Assign / Change Class Modal */}
+      <Modal
+        isOpen={isAssignClassModalOpen}
+        onClose={() => setIsAssignClassModalOpen(false)}
+        title="Gán Lớp Cho Học Viên"
+      >
+        <form onSubmit={handleConfirmAssignClass} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Chọn Lớp Học
+            </label>
+            <select
+              value={targetAssignClassId}
+              onChange={e => setTargetAssignClassId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
+            >
+              <option value="UNASSIGN">-- Chưa xếp lớp (Tự do theo ca) --</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.facilityName || 'Cơ sở'} • HLV {c.coachName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsAssignClassModalOpen(false)}
+              className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs cursor-pointer"
+            >
+              Lưu Thay Đổi
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal Xác Nhận Thu Tiền / Học Phí - Cần nút Confirm để xác nhận */}
+      <Modal
+        isOpen={Boolean(confirmingPayment)}
+        onClose={() => setConfirmingPayment(null)}
+        title="Xác Nhận Thu Tiền Học Phí"
+        subtitle={
+          confirmingPayment
+            ? `Phiếu thu: ${confirmingPayment.code} • Người xác nhận: ${currentUser.name} (${
+                currentUser.role === 'FACILITY_MANAGER' ? 'Quản lý sân' : 'Admin'
+              })`
+            : ''
+        }
+      >
+        {confirmingPayment && (
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              confirmPayment(confirmingPayment.id, confirmMethod, confirmNote);
+              setConfirmingPayment(null);
+            }}
+            className="space-y-4"
+          >
+            <div className="p-4 bg-emerald-50/80 rounded-2xl border border-emerald-200 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500">Học viên:</span>
+                <strong className="text-sm font-extrabold text-[#0F172A]">
+                  {confirmingPayment.studentName}
+                </strong>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500">Số điện thoại:</span>
+                <span className="font-semibold text-slate-700">
+                  {confirmingPayment.studentPhone || currentStudent.phone || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500">Kỳ học phí:</span>
+                <span className="font-semibold text-slate-700">
+                  {confirmingPayment.month}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-emerald-200/80 flex items-center justify-between">
+                <span className="text-xs font-black text-slate-700 uppercase">
+                  Số tiền cần thu:
+                </span>
+                <span className="text-xl font-black text-[#10B981]">
+                  {confirmingPayment.amount.toLocaleString('vi-VN')}đ
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                Hình thức thanh toán đã nhận *
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['Chuyển khoản QR', 'Tiền mặt', 'Thẻ ngân hàng', 'Ví MoMo'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setConfirmMethod(m)}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center ${
+                      confirmMethod === m
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Ghi chú thu tiền (tùy chọn)
+              </label>
+              <input
+                type="text"
+                value={confirmNote}
+                onChange={e => setConfirmNote(e.target.value)}
+                placeholder="VD: Đã nhận tiền mặt tại quầy / Đã chuyển khoản qua VietQR..."
+                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 flex items-center justify-between border border-slate-200/70">
+              <span>
+                Quyền xác nhận:{' '}
+                <strong className="text-slate-800">
+                  {currentUser.role === 'FACILITY_MANAGER' ? 'Quản lý sân' : 'Admin'}
+                </strong>
+              </span>
+              <span>
+                Người thu: <strong className="text-slate-800">{currentUser.name}</strong>
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmingPayment(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl shadow-md shadow-emerald-900/15 cursor-pointer flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>XÁC NHẬN ĐÃ THU TIỀN</span>
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   );

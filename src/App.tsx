@@ -22,7 +22,7 @@ import { FacilitiesView } from './views/FacilitiesView';
 import { ShiftsView } from './views/ShiftsView';
 
 const MainContent: React.FC = () => {
-  const { activeTab, selectedId, navigate } = useApp();
+  const { activeTab, selectedId, navigate, currentUser } = useApp();
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -63,8 +63,14 @@ const MainContent: React.FC = () => {
       case 'coaches':
         return <CoachesView />;
       case 'facilities':
+        if (currentUser.role !== 'ADMIN') {
+          return <DashboardView />;
+        }
         return <FacilitiesView />;
       case 'shifts':
+        if (currentUser.role !== 'ADMIN') {
+          return <DashboardView />;
+        }
         return <ShiftsView />;
       case 'schedule':
         return <ScheduleView />;
@@ -110,10 +116,67 @@ const MainContent: React.FC = () => {
   );
 };
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 font-sans">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 shadow-xl border border-slate-200 text-center space-y-4">
+            <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+              ⚠️
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900">Đã xảy ra lỗi tải giao diện</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                {this.state.error?.message || 'Có lỗi không mong muốn trong khi tải trang.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="w-full py-3 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-sm rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-900/10"
+            >
+              Tải lại ứng dụng
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <AppProvider>
-      <MainContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <MainContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

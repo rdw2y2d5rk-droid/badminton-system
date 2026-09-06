@@ -25,6 +25,7 @@ export const Sidebar: React.FC = () => {
     sessions,
     payments,
     isCoach,
+    isFacilityManager,
     currentUser,
     assignedSessions,
     pendingScheduleCount
@@ -40,7 +41,7 @@ export const Sidebar: React.FC = () => {
   ).length;
   
   // Pending today sessions
-  const targetSessions = isCoach ? assignedSessions : sessions;
+  const targetSessions = (isCoach || isFacilityManager) ? assignedSessions : sessions;
   const pendingAttendanceCount = targetSessions.filter(
     s => s.date === '2026-08-28' && !s.attendanceDone
   ).length;
@@ -57,14 +58,14 @@ export const Sidebar: React.FC = () => {
       id: 'facilities',
       label: 'Sân cầu lông',
       icon: MapPin,
-      roles: ['ADMIN', 'FACILITY_MANAGER'],
+      roles: ['ADMIN'],
       badge: null
     },
     {
       id: 'shifts',
       label: 'Ca học',
       icon: Clock,
-      roles: ['ADMIN', 'FACILITY_MANAGER'],
+      roles: ['ADMIN'],
       badge: null
     },
     {
@@ -94,10 +95,10 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: 'schedule',
-      label: 'Lịch học',
+      label: isCoach ? 'Lịch dạy' : 'Lịch học',
       icon: Calendar,
       roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
-      badge: pendingScheduleCount > 0 ? (
+      badge: currentUser.role === 'ADMIN' && pendingScheduleCount > 0 ? (
         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
           {pendingScheduleCount}
         </span>

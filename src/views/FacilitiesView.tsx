@@ -7,7 +7,8 @@ import {
   Users,
   Search,
   UserCheck,
-  ChevronRight
+  ChevronRight,
+  ShieldAlert
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Facility } from '../types';
@@ -119,6 +120,29 @@ export const FacilitiesView: React.FC = () => {
   const totalCoachesCount = coaches.length;
   const totalStudentsCount = students.length;
 
+  // Check permission: Only ADMIN can view, add, edit, or delete facilities
+  if (currentUser.role !== 'ADMIN') {
+    return (
+      <div className="max-w-xl mx-auto py-16 text-center space-y-4">
+        <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto border border-rose-100 shadow-xs">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-extrabold text-[#0F172A]">Không Có Quyền Truy Cập</h2>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Quản lý sân không có quyền thêm, sửa, xoá hoặc xem thông tin các sân cầu lông trong hệ thống. Quyền hạn này chỉ dành riêng cho Ban Quản Trị (Admin).
+        </p>
+        <div className="pt-2">
+          <button
+            onClick={() => navigate('dashboard')}
+            className="px-5 py-2.5 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            Quay Về Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header */}
@@ -136,7 +160,7 @@ export const FacilitiesView: React.FC = () => {
           </p>
         </div>
 
-        {currentUser.role !== 'COACH' && (
+        {currentUser.role === 'ADMIN' && (
           <button
             onClick={openAddModal}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#10B981] hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
@@ -331,7 +355,7 @@ export const FacilitiesView: React.FC = () => {
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
 
-                {currentUser.role !== 'COACH' && (
+                {currentUser.role === 'ADMIN' && (
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openEditModal(facility)}
