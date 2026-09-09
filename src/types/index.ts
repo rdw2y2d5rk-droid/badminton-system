@@ -169,6 +169,7 @@ export interface Student {
   note?: string;
   lastAttended?: string;
   skillLevel: SkillLevel;
+  level?: SkillLevel | string;
   attendanceHistory?: StudentAttendanceHistoryItem[];
 }
 
@@ -253,10 +254,14 @@ export interface SessionSchedule {
   coachAttendance?: CoachAttendanceRecord;
   attendanceRecords?: AttendanceRecordItem[];
   makeupStudents?: AttendanceRecordItem[]; // Học viên học bù thêm vào ca
+  coaches?: Coach[];
+  coachIds?: string[];
   isCoachRegistered?: boolean; // Ca do HLV tự đăng ký
   registeredAt?: string;
   note?: string;
 }
+
+export type SessionAttendance = SessionSchedule | (Partial<SessionSchedule> & { id: string; [key: string]: any });
 
 export interface PaymentItem {
   id: string;

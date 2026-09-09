@@ -28,6 +28,7 @@ import {
   PaymentItem,
   ScheduledSession,
   SessionSchedule,
+  SessionAttendance,
   ShiftInfo,
   Student,
   UserProfile,
@@ -1416,19 +1417,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSessions(prev => {
       const existing = prev.find(s => s.id === sessionId);
       if (!existing) {
-        const cleanFacName = sessionMeta?.facilityName
-          ? sessionMeta.facilityName.replace('Sân Cầu Lông ', '')
-          : 'Cầu Giấy';
-        const newSession: SessionAttendance = {
+        const newSession: SessionSchedule = {
           id: sessionId,
           classId: student.classId || 'CLASS01',
           className: student.className || 'Lớp Cầu Lông',
+          level: 'Beginner',
           facilityId: sessionMeta?.facilityId || 'CS01',
+          facilityName: sessionMeta?.facilityName || 'Sân Cầu Lông Cầu Giấy',
           date: sessionMeta?.date || new Date().toISOString().split('T')[0],
+          dayOfWeek: 'Hôm nay',
+          startTime: '17:30',
+          endTime: '19:00',
           timeSlot: sessionMeta?.timeSlot || '17:30 - 19:00',
           court: 'Sân 01',
           coachId: 'HLV001',
           coachName: 'Huấn luyện viên',
+          status: 'Upcoming',
+          attendanceDone: false,
           coachAttendanceDone: false,
           totalStudents: 1,
           makeupStudents: [makeupItem]
@@ -2177,7 +2182,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const packageSessions = specificDates.length > 0 ? specificDates.length : (studentData.packageSessions || 12);
     const calculatedTuition = studentData.tuitionFee || (packageSessions * sessionUnitPrice);
     const allowedLeaves = Math.floor(packageSessions / 4);
-    const scheduleStatus = 'confirmed';
+    const scheduleStatus: 'confirmed' | 'pending_admin' = 'confirmed';
 
     let resolvedFacilityName = studentData.facilityName || 'Sân Cầu Lông Cầu Giấy';
     let resolvedCourtName = studentData.courtName || resolvedFacilityName;
@@ -2255,7 +2260,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    if (scheduleStatus === 'pending_admin') {
+    if ((scheduleStatus as string) === 'pending_admin') {
       const newAdminNotif: AdminNotification = {
         id: `REQ-${Date.now()}`,
         type: 'new_schedule_request',

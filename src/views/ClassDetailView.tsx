@@ -125,7 +125,7 @@ export const ClassDetailView: React.FC<ClassDetailViewProps> = ({ classId, onBac
         id: currentClass.coachId || 'HLV_DEFAULT',
         code: currentClass.coachId || 'HLV_DEFAULT',
         name: currentClass.coachName,
-        avatar: currentClass.coachAvatar,
+        avatar: currentClass.coachAvatar || '',
         specialty: 'BWF Certified Coach',
         phone: '0901 000 000',
         email: 'coach@smashpro.vn',
@@ -134,7 +134,10 @@ export const ClassDetailView: React.FC<ClassDetailViewProps> = ({ classId, onBac
         status: 'Active',
         taughtSessionsMonth: 24,
         taughtHoursMonth: 36,
-        totalStudents: 18
+        totalStudents: 18,
+        assignedClassIds: [currentClass.id],
+        joinedDate: '2025-01-01',
+        hourlyRate: 300000
       }];
     }
     return [];

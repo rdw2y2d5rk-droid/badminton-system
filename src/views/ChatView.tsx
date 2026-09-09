@@ -253,6 +253,97 @@ export const ChatView: React.FC = () => {
     }
   };
 
+  // Lọc tin nhắn theo tab đã chọn (Tất cả hoặc Yêu cầu xác nhận)
+  const filteredMessages = useMemo(() => {
+    if (filterType === 'notices') {
+      return chatMessages.filter(m => m.isNotice);
+    }
+    return chatMessages;
+  }, [chatMessages, filterType]);
+
+  // Huy hiệu hiển thị vai trò người dùng (Admin, Quản lý sân, HLV)
+  const getRoleBadge = (role?: UserRole | 'ALL' | string) => {
+    switch (role) {
+      case 'ADMIN':
+        return (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900 text-white shadow-2xs">
+            <Shield className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+            <span>Admin</span>
+          </span>
+        );
+      case 'FACILITY_MANAGER':
+        return (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs">
+            <Building2 className="w-2.5 h-2.5 text-amber-700 shrink-0" />
+            <span>QL Sân</span>
+          </span>
+        );
+      case 'COACH':
+        return (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
+            <UserCheck className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+            <span>HLV</span>
+          </span>
+        );
+      case 'ALL':
+        return (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 shadow-2xs">
+            <span>Tất cả</span>
+          </span>
+        );
+      default:
+        return role ? (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+            <span>{role}</span>
+          </span>
+        ) : null;
+    }
+  };
+
+  // Render nội dung tin nhắn có gắn thẻ tag tên (@)
+  const renderMessageContent = (content: string, isMine: boolean) => {
+    if (!content) return null;
+
+    const knownNames = Array.from(
+      new Set([
+        'Tất cả',
+        'tất cả',
+        'Mọi người',
+        'mọi người',
+        ...mentionableUsers.map(u => u.name)
+      ])
+    ).sort((a, b) => b.length - a.length);
+
+    const escapedNames = knownNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const mentionPattern = new RegExp(`(@(?:${escapedNames})|@[^\\s,.!?:;]+)`, 'gi');
+
+    const parts = content.split(mentionPattern);
+
+    return parts.map((part, index) => {
+      if (part.startsWith('@')) {
+        const lower = part.toLowerCase();
+        const isAll = lower === '@tất cả' || lower === '@mọi người';
+
+        return (
+          <span
+            key={index}
+            className={`inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded font-bold text-xs ${
+              isMine
+                ? isAll
+                  ? 'bg-amber-400 text-amber-950 shadow-2xs'
+                  : 'bg-emerald-700 text-emerald-100 border border-emerald-500/80'
+                : isAll
+                ? 'bg-amber-100 text-amber-900 border border-amber-300 font-extrabold'
+                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+            }`}
+          >
+            {part}
+          </span>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
@@ -356,6 +447,9 @@ export const ChatView: React.FC = () => {
               // Lấy các phản hồi xác nhận tích xanh
               const confirmReactions = (msg.reactions || []).filter(r => r.emoji === '✅');
               const hasIConfirmed = confirmReactions.some(r => r.userId === currentUser.id);
+              const allReactions = msg.reactions || [];
+              const hasMyReaction = allReactions.some(r => r.userId === currentUser.id);
+              const uniqueEmojis = Array.from(new Set(allReactions.map(r => r.emoji)));
 
               // Kiểm tra xem tin nhắn có tag tên tôi không
               const isMentionedToMe =
@@ -449,7 +543,7 @@ export const ChatView: React.FC = () => {
                         </p>
 
                         {/* Reaction Pill Docked on Corner of Bubble (Messenger FB style) */}
-                        {confirmReactions.length > 0 && (
+                        {allReactions.length > 0 && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -457,15 +551,17 @@ export const ChatView: React.FC = () => {
                               setSelectedMessageForDetails(msg);
                             }}
                             title="Bấm để xem danh sách người đã react"
-                            className={`absolute -bottom-2.5 ${isMine ? 'right-2' : 'left-2'} px-1.5 py-0.5 rounded-full bg-white shadow-xs border ${
-                              hasIConfirmed
+                            className={`absolute -bottom-2.5 ${isMine ? 'right-2' : 'left-2'} px-2 py-0.5 rounded-full bg-white shadow-xs border ${
+                              hasMyReaction
                                 ? 'border-emerald-400 ring-1 ring-emerald-300'
                                 : 'border-slate-200 hover:border-slate-300'
                             } flex items-center gap-1 text-xs cursor-pointer hover:scale-105 active:scale-95 transition-transform z-10 select-none`}
                           >
-                            <span className="text-xs leading-none">✅</span>
-                            <span className={`text-[11px] font-bold ${hasIConfirmed ? 'text-emerald-700' : 'text-slate-700'}`}>
-                              {confirmReactions.length}
+                            <span className="text-xs leading-none">
+                              {uniqueEmojis.slice(0, 3).join('')}
+                            </span>
+                            <span className={`text-[11px] font-bold ${hasMyReaction ? 'text-emerald-700' : 'text-slate-700'}`}>
+                              {allReactions.length}
                             </span>
                           </button>
                         )}
@@ -675,27 +771,26 @@ export const ChatView: React.FC = () => {
 
             {/* Messenger Reaction Tab Bar */}
             {(() => {
-              const confirmedList = (selectedMessageForDetails.reactions || []).filter(
-                r => r.emoji === '✅'
-              );
+              const reactionList = selectedMessageForDetails.reactions || [];
+              const uniqueEmojis = Array.from(new Set(reactionList.map(r => r.emoji)));
 
               return (
                 <div>
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <div className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 flex items-center gap-1.5 border border-emerald-200/80 shadow-2xs">
-                      <span className="text-sm leading-none">✅</span>
-                      <span>{confirmedList.length}</span>
+                      <span className="text-sm leading-none">{uniqueEmojis.join(' ') || '✅'}</span>
+                      <span>{reactionList.length} lượt phản hồi</span>
                     </div>
                   </div>
 
                   {/* Danh sách người đã react (Messenger Style) */}
                   <div className="space-y-1 max-h-64 overflow-y-auto pr-1 mt-2.5 divide-y divide-slate-100">
-                    {confirmedList.length === 0 ? (
+                    {reactionList.length === 0 ? (
                       <div className="py-8 text-center text-xs text-slate-400">
                         Chưa có ai react tin nhắn này.
                       </div>
                     ) : (
-                      confirmedList.map((r, idx) => {
+                      reactionList.map((r, idx) => {
                         const isMe = r.userId === currentUser.id;
 
                         return (
@@ -704,7 +799,7 @@ export const ChatView: React.FC = () => {
                             className="py-2.5 px-2 hover:bg-slate-50/80 rounded-xl flex items-center justify-between gap-3 transition-colors"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              {/* Avatar tròn kèm icon ✅ nhỏ góc avatar như FB Messenger */}
+                              {/* Avatar tròn kèm icon emoji nhỏ góc avatar như FB Messenger */}
                               <div className="relative shrink-0">
                                 <img
                                   src={r.userAvatar}
@@ -712,7 +807,7 @@ export const ChatView: React.FC = () => {
                                   className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs"
                                 />
                                 <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-white rounded-full flex items-center justify-center text-[10px] shadow-xs border border-slate-100">
-                                  ✅
+                                  {r.emoji}
                                 </span>
                               </div>
 
@@ -739,11 +834,11 @@ export const ChatView: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  toggleChatReaction(selectedMessageForDetails.id, '✅', 'Đã xác nhận');
+                                  toggleChatReaction(selectedMessageForDetails.id, r.emoji, r.label || 'Đã react');
                                   setSelectedMessageForDetails(prev => {
                                     if (!prev) return null;
                                     const updated = (prev.reactions || []).filter(
-                                      rx => !(rx.userId === currentUser.id && rx.emoji === '✅')
+                                      rx => !(rx.userId === currentUser.id && rx.emoji === r.emoji)
                                     );
                                     return { ...prev, reactions: updated };
                                   });
@@ -753,7 +848,7 @@ export const ChatView: React.FC = () => {
                                 Nhấp để gỡ
                               </button>
                             ) : (
-                              <span className="text-sm select-none">✅</span>
+                              <span className="text-sm select-none">{r.emoji}</span>
                             )}
                           </div>
                         );
