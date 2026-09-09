@@ -20,6 +20,7 @@ import { ReportsView } from './views/ReportsView';
 import { SettingsView } from './views/SettingsView';
 import { FacilitiesView } from './views/FacilitiesView';
 import { ShiftsView } from './views/ShiftsView';
+import { ChatView } from './views/ChatView';
 
 const MainContent: React.FC = () => {
   const { activeTab, selectedId, navigate, currentUser } = useApp();
@@ -80,6 +81,8 @@ const MainContent: React.FC = () => {
         return <PaymentsView />;
       case 'reports':
         return <ReportsView />;
+      case 'chat':
+        return <ChatView />;
       case 'settings':
         return <SettingsView />;
       default:

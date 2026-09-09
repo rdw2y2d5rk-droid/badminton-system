@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   LayoutDashboard,
   Calendar,
@@ -16,7 +16,8 @@ import {
   Search,
   Bell,
   MapPin,
-  Clock
+  Clock,
+  MessageSquare
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { INITIAL_USERS } from '../../data/mockData';
@@ -35,12 +36,27 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
     isFacilityManager,
     sessions,
     assignedSessions,
-    notifications
+    notifications,
+    markNotificationAsRead
   } = useApp();
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const unreadNotifCount = notifications.filter(n => !n.read).length;
+  const coachMobileReminders = useMemo(() => {
+    if (currentUser.role !== 'COACH') return [];
+    return notifications.filter(
+      n => n.targetRole === 'COACH' && (!n.targetCoachId || n.targetCoachId === currentUser.coachId)
+    );
+  }, [currentUser, notifications]);
+
+  const unreadNotifCount = useMemo(() => {
+    if (currentUser.role === 'COACH') {
+      return notifications.filter(
+        n => !n.read && (!n.targetRole || (n.targetRole === 'COACH' && (!n.targetCoachId || n.targetCoachId === currentUser.coachId)))
+      ).length;
+    }
+    return notifications.filter(n => !n.read).length;
+  }, [currentUser, notifications]);
   const targetSessions = (isCoach || isFacilityManager) ? assignedSessions : sessions;
   const pendingAttendanceCount = targetSessions.filter(
     s => s.date === '2026-08-28' && !s.attendanceDone
@@ -86,6 +102,16 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
             </button>
           )}
 
+          {/* Quick Chat Button */}
+          <button
+            type="button"
+            onClick={() => navigate('chat')}
+            className="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors cursor-pointer relative"
+            aria-label="Kênh Chat"
+          >
+            <MessageSquare className="w-4.5 h-4.5" />
+          </button>
+
           {/* Quick Attendance */}
           <button
             onClick={() => navigate('attendance')}
@@ -93,6 +119,20 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
           >
             <Flame className="w-3.5 h-3.5 fill-white" />
             <span>Điểm danh</span>
+          </button>
+
+          {/* Notification Button */}
+          <button
+            onClick={() => setIsDrawerOpen(true)}
+            className="relative p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors cursor-pointer"
+            aria-label="Thông báo"
+          >
+            <Bell className="w-4.5 h-4.5" />
+            {unreadNotifCount > 0 && (
+              <span className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center shadow-xs">
+                {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+              </span>
+            )}
           </button>
 
           {/* Drawer Menu Hamburger */}
@@ -166,6 +206,47 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
               </div>
             </div>
 
+            {/* Coach Reminders Card in Mobile Drawer */}
+            {currentUser.role === 'COACH' && coachMobileReminders.length > 0 && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400 mb-2">
+                  <MessageSquare className="w-4 h-4 text-amber-400" />
+                  <span>Dặn dò ca dạy ({coachMobileReminders.length})</span>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {coachMobileReminders.map(notif => (
+                    <div
+                      key={notif.id}
+                      onClick={() => {
+                        markNotificationAsRead(notif.id);
+                        if (notif.linkTo) {
+                          navigate(notif.linkTo.tab);
+                        }
+                        setIsDrawerOpen(false);
+                      }}
+                      className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                        !notif.read
+                          ? 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                          : 'bg-slate-800/40 border-slate-700/50 text-slate-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-semibold text-[11px] mb-1">
+                        <span className="text-amber-300 truncate">{notif.facilityName || 'Cơ sở'}</span>
+                        <span className="text-[10px] text-amber-400/80">{notif.timeSlot}</span>
+                      </div>
+                      <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed font-normal">
+                        "{notif.noteContent || notif.message}"
+                      </p>
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+                        <span>Từ: {notif.senderName || 'Ban Quản Lý'}</span>
+                        <span className="text-amber-400 font-medium">Xem lớp →</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* All Navigation Links */}
             <nav className="flex-1 overflow-y-auto space-y-1">
               {[
@@ -189,6 +270,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenSearch }) => {
                 ...(currentUser.role === 'ADMIN'
                   ? [{ id: 'reports', label: 'Thống kê', icon: BarChart3 }]
                   : []),
+                { id: 'chat', label: 'Kênh Chat Chung', icon: MessageSquare },
                 { id: 'settings', label: 'Cài đặt', icon: Settings }
               ].map(item => {
                 const Icon = item.icon;

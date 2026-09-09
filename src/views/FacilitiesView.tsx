@@ -433,7 +433,8 @@ export const FacilitiesView: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 mb-1">Đơn giá thuê (đ/h)</label>
               <input
                 type="number"
-                step="10000"
+                min={0}
+                step="1"
                 value={pricePerHour}
                 onChange={e => setPricePerHour(Number(e.target.value))}
                 className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold"

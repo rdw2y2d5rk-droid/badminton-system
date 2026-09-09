@@ -33,7 +33,7 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  const maxWidthClasses = {
+  const maxWidthMap: Record<string, string> = {
     sm: 'max-w-sm',
     md: 'max-w-md',
     lg: 'max-w-lg',
@@ -41,7 +41,11 @@ export const Modal: React.FC<ModalProps> = ({
     '2xl': 'max-w-2xl',
     '3xl': 'max-w-3xl',
     '4xl': 'max-w-4xl'
-  }[maxWidth];
+  };
+
+  const maxWidthClasses =
+    maxWidthMap[maxWidth] ||
+    (typeof maxWidth === 'string' && maxWidth.startsWith('max-w-') ? maxWidth : 'max-w-lg');
 
   return (
     <AnimatePresence>

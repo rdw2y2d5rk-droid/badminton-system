@@ -19,13 +19,14 @@ import {
   ShieldAlert,
   Info,
   Bell,
-  Check
+  Check,
+  RotateCw
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PaymentBadge, StudentStatusBadge } from '../components/common/Badge';
 import { SessionProgressBar } from '../components/common/ProgressBar';
 import { Modal } from '../components/common/Modal';
-import { PaymentStatus, SkillLevel, Student } from '../types';
+import { PaymentStatus, SkillLevel, Student, ScheduledSession } from '../types';
 
 export const StudentsView: React.FC = () => {
   const {
@@ -41,7 +42,8 @@ export const StudentsView: React.FC = () => {
     importStudentsFromExcel,
     isCoach,
     currentUser,
-    assignedStudents
+    assignedStudents,
+    renewStudentMonth
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,6 +72,90 @@ export const StudentsView: React.FC = () => {
     '2026-08-03', '2026-08-05', '2026-08-07', '2026-08-10', '2026-08-12', '2026-08-14', '2026-08-17', '2026-08-19', '2026-08-21', '2026-08-24', '2026-08-26', '2026-08-28'
   ]);
 
+  // Hàm làm sạch tên cơ sở: Chỉ lấy Cầu Giấy, Ba Đình, Thanh Xuân (loại bỏ tiền tố "Sân Cầu Lông ...", "Cơ sở X - ...")
+  const formatCleanFacilityName = (name?: string): string => {
+    if (!name) return 'Cầu Giấy';
+    return (
+      name
+        .replace(/Sân\s+Cầu\s+Lông\s+/gi, '')
+        .replace(/Cơ\s+sở\s+\d+\s*[-–—:]\s*/gi, '')
+        .replace(/Cơ\s+sở\s+/gi, '')
+        .replace(/^Sân\s+/gi, '')
+        .trim() || 'Cầu Giấy'
+    );
+  };
+
+  // Scheduled Sessions with facility and shift for each date
+  const [newScheduledSessions, setNewScheduledSessions] = useState<ScheduledSession[]>(() => {
+    const targetFac = facilities.find(f => f.id === defaultFacilityId) || facilities[0];
+    const targetShift = shifts[3] || shifts[0];
+    return [
+      '2026-08-03', '2026-08-05', '2026-08-07', '2026-08-10', '2026-08-12', '2026-08-14',
+      '2026-08-17', '2026-08-19', '2026-08-21', '2026-08-24', '2026-08-26', '2026-08-28'
+    ].map(d => ({
+      date: d,
+      facilityId: targetFac?.id || 'CS01',
+      facilityName: formatCleanFacilityName(targetFac?.name),
+      shiftId: targetShift?.id || 'CA04',
+      shiftName: targetShift?.name || 'Ca Tối 1',
+      timeSlot: targetShift?.timeSlot || '18:00 - 19:30'
+    }));
+  });
+
+  const handleFacilityChange = (facilityId: string) => {
+    setNewFacilityId(facilityId);
+    const targetFac = facilities.find(f => f.id === facilityId) || facilities[0];
+    setNewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        facilityId: targetFac.id,
+        facilityName: formatCleanFacilityName(targetFac.name)
+      }))
+    );
+  };
+
+  const handleShiftChange = (shiftId: string) => {
+    setNewShiftId(shiftId);
+    const targetShift = shifts.find(s => s.id === shiftId) || shifts[0];
+    setNewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        shiftId: targetShift.id,
+        shiftName: targetShift.name,
+        timeSlot: targetShift.timeSlot
+      }))
+    );
+  };
+
+  const updateSessionFacility = (dateStr: string, facilityId: string) => {
+    const fac = facilities.find(f => f.id === facilityId) || facilities[0];
+    setNewScheduledSessions(prev =>
+      prev.map(s => (s.date === dateStr ? { ...s, facilityId: fac.id, facilityName: formatCleanFacilityName(fac.name) } : s))
+    );
+  };
+
+  const updateSessionShift = (dateStr: string, shiftId: string) => {
+    const sh = shifts.find(s => s.id === shiftId) || shifts[0];
+    setNewScheduledSessions(prev =>
+      prev.map(s => (s.date === dateStr ? { ...s, shiftId: sh.id, shiftName: sh.name, timeSlot: sh.timeSlot } : s))
+    );
+  };
+
+  const applyDefaultToAllSessions = () => {
+    const targetFac = facilities.find(f => f.id === newFacilityId) || facilities[0];
+    const targetShift = shifts.find(s => s.id === newShiftId) || shifts[0];
+    setNewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        facilityId: targetFac.id,
+        facilityName: formatCleanFacilityName(targetFac.name),
+        shiftId: targetShift.id,
+        shiftName: targetShift.name,
+        timeSlot: targetShift.timeSlot
+      }))
+    );
+  };
+
   // Pricing & Sessions
   const [newUnitPrice, setNewUnitPrice] = useState<number>(sessionUnitPrice || 150000);
   const [newSessionsCount, setNewSessionsCount] = useState<number>(12);
@@ -80,8 +166,28 @@ export const StudentsView: React.FC = () => {
   // Preset helpers for interactive month picker
   const toggleDate = (dateStr: string) => {
     setSpecificDates(prev => {
-      const next = prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort();
+      const isRemoving = prev.includes(dateStr);
+      const next = isRemoving ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort();
       setNewSessionsCount(next.length > 0 ? next.length : 12);
+
+      setNewScheduledSessions(prevSessions => {
+        if (isRemoving) {
+          return prevSessions.filter(s => s.date !== dateStr);
+        } else {
+          const targetFacility = facilities.find(f => f.id === newFacilityId) || facilities[0];
+          const targetShift = shifts.find(s => s.id === newShiftId) || shifts[0];
+          const newSession: ScheduledSession = {
+            date: dateStr,
+            facilityId: targetFacility?.id || 'CS01',
+            facilityName: formatCleanFacilityName(targetFacility?.name),
+            shiftId: targetShift?.id || 'CA04',
+            shiftName: targetShift?.name || 'Ca Tối 1',
+            timeSlot: targetShift?.timeSlot || '18:00 - 19:30'
+          };
+          return [...prevSessions, newSession].sort((a, b) => a.date.localeCompare(b.date));
+        }
+      });
+
       return next;
     });
   };
@@ -93,6 +199,7 @@ export const StudentsView: React.FC = () => {
 
     if (preset === 'clear') {
       setSpecificDates([]);
+      setNewScheduledSessions([]);
       setNewSessionsCount(12);
       return;
     }
@@ -112,12 +219,259 @@ export const StudentsView: React.FC = () => {
     }
     setSpecificDates(result);
     setNewSessionsCount(result.length > 0 ? result.length : 12);
+
+    const targetFac = facilities.find(f => f.id === newFacilityId) || facilities[0];
+    const targetShift = shifts.find(s => s.id === newShiftId) || shifts[0];
+    setNewScheduledSessions(
+      result.map(d => ({
+        date: d,
+        facilityId: targetFac?.id || 'CS01',
+        facilityName: formatCleanFacilityName(targetFac?.name),
+        shiftId: targetShift?.id || 'CA04',
+        shiftName: targetShift?.name || 'Ca Tối 1',
+        timeSlot: targetShift?.timeSlot || '18:00 - 19:30'
+      }))
+    );
   };
 
   // Excel Import State
   const [importText, setImportText] = useState('');
   const [previewRows, setPreviewRows] = useState<Array<Omit<Student, 'id' | 'code'>>>([]);
   const [importFileName, setImportFileName] = useState('');
+
+  // Renew Modal State
+  const [renewModalStudent, setRenewModalStudent] = useState<Student | null>(null);
+  const [renewFacilityId, setRenewFacilityId] = useState<string>(facilities[0]?.id || 'CS01');
+  const [renewShiftId, setRenewShiftId] = useState<string>(shifts[0]?.id || 'CA04');
+  const [renewMonthRaw, setRenewMonthRaw] = useState('2026-09');
+  const [renewUnitPrice, setRenewUnitPrice] = useState<number>(sessionUnitPrice || 150000);
+  const [renewSessionsCount, setRenewSessionsCount] = useState<number>(12);
+  const [renewStartDate, setRenewStartDate] = useState('2026-09-01');
+  const [renewEndDate, setRenewEndDate] = useState('2026-09-30');
+  const [renewSpecificDates, setRenewSpecificDates] = useState<string[]>([
+    '2026-09-02', '2026-09-04', '2026-09-07', '2026-09-09', '2026-09-11', '2026-09-14',
+    '2026-09-16', '2026-09-18', '2026-09-21', '2026-09-23', '2026-09-25', '2026-09-28'
+  ]);
+  const [renewScheduledSessions, setRenewScheduledSessions] = useState<ScheduledSession[]>([]);
+
+  const handleRenewFacilityChange = (facilityId: string) => {
+    setRenewFacilityId(facilityId);
+    const fac = facilities.find(f => f.id === facilityId) || facilities[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        facilityId: fac.id,
+        facilityName: formatCleanFacilityName(fac.name)
+      }))
+    );
+  };
+
+  const handleRenewShiftChange = (shiftId: string) => {
+    setRenewShiftId(shiftId);
+    const sh = shifts.find(s => s.id === shiftId) || shifts[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        shiftId: sh.id,
+        shiftName: sh.name,
+        timeSlot: sh.timeSlot
+      }))
+    );
+  };
+
+  const updateRenewSessionFacility = (dateStr: string, facilityId: string) => {
+    const fac = facilities.find(f => f.id === facilityId) || facilities[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => (s.date === dateStr ? { ...s, facilityId: fac.id, facilityName: formatCleanFacilityName(fac.name) } : s))
+    );
+  };
+
+  const updateRenewSessionShift = (dateStr: string, shiftId: string) => {
+    const sh = shifts.find(s => s.id === shiftId) || shifts[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => (s.date === dateStr ? { ...s, shiftId: sh.id, shiftName: sh.name, timeSlot: sh.timeSlot } : s))
+    );
+  };
+
+  const applyRenewDefaultToAll = () => {
+    const fac = facilities.find(f => f.id === renewFacilityId) || facilities[0];
+    const sh = shifts.find(s => s.id === renewShiftId) || shifts[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        facilityId: fac.id,
+        facilityName: formatCleanFacilityName(fac.name),
+        shiftId: sh.id,
+        shiftName: sh.name,
+        timeSlot: sh.timeSlot
+      }))
+    );
+  };
+
+  const openRenewModal = (student: Student) => {
+    setRenewModalStudent(student);
+    const defaultMonth = '2026-09';
+    setRenewMonthRaw(defaultMonth);
+    setRenewUnitPrice(sessionUnitPrice || 150000);
+    setRenewStartDate('2026-09-01');
+    setRenewEndDate('2026-09-30');
+
+    const defaultFac = facilities.find(f => f.id === student.facilityId) || facilities[0];
+    const defaultShift = shifts.find(s => s.id === (student.shiftId || student.fixedShiftId)) || shifts[3] || shifts[0];
+    setRenewFacilityId(defaultFac.id);
+    setRenewShiftId(defaultShift.id);
+
+    // Auto populate default weekdays for the month
+    const [year, month] = defaultMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const result: string[] = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dObj = new Date(year, month - 1, day);
+      const dayOfWeek = dObj.getDay();
+      if (dayOfWeek >= 1 && dayOfWeek <= 5 && result.length < 12) {
+        result.push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+      }
+    }
+    setRenewSpecificDates(result);
+    setRenewSessionsCount(result.length > 0 ? result.length : 12);
+    setRenewScheduledSessions(
+      result.map(d => ({
+        date: d,
+        facilityId: defaultFac.id,
+        facilityName: formatCleanFacilityName(defaultFac.name),
+        shiftId: defaultShift.id,
+        shiftName: defaultShift.name,
+        timeSlot: defaultShift.timeSlot
+      }))
+    );
+  };
+
+  const handleRenewMonthChange = (monthVal: string) => {
+    setRenewMonthRaw(monthVal);
+    if (monthVal) {
+      const [y, m] = monthVal.split('-').map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      setRenewStartDate(`${monthVal}-01`);
+      setRenewEndDate(`${monthVal}-${String(lastDay).padStart(2, '0')}`);
+
+      const result: string[] = [];
+      for (let day = 1; day <= lastDay; day++) {
+        const dObj = new Date(y, m - 1, day);
+        const dayOfWeek = dObj.getDay();
+        if (dayOfWeek >= 1 && dayOfWeek <= 5 && result.length < 12) {
+          result.push(`${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+        }
+      }
+      setRenewSpecificDates(result);
+      setRenewSessionsCount(result.length > 0 ? result.length : 12);
+
+      const fac = facilities.find(f => f.id === renewFacilityId) || facilities[0];
+      const sh = shifts.find(s => s.id === renewShiftId) || shifts[0];
+      setRenewScheduledSessions(
+        result.map(d => ({
+          date: d,
+          facilityId: fac.id,
+          facilityName: formatCleanFacilityName(fac.name),
+          shiftId: sh.id,
+          shiftName: sh.name,
+          timeSlot: sh.timeSlot
+        }))
+      );
+    }
+  };
+
+  const toggleRenewDate = (dateStr: string) => {
+    setRenewSpecificDates(prev => {
+      const isRemoving = prev.includes(dateStr);
+      const next = isRemoving ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort();
+      setRenewSessionsCount(next.length > 0 ? next.length : 12);
+
+      setRenewScheduledSessions(prevSessions => {
+        if (isRemoving) {
+          return prevSessions.filter(s => s.date !== dateStr);
+        } else {
+          const fac = facilities.find(f => f.id === renewFacilityId) || facilities[0];
+          const sh = shifts.find(s => s.id === renewShiftId) || shifts[0];
+          const newSession: ScheduledSession = {
+            date: dateStr,
+            facilityId: fac.id,
+            facilityName: formatCleanFacilityName(fac.name),
+            shiftId: sh.id,
+            shiftName: sh.name,
+            timeSlot: sh.timeSlot
+          };
+          return [...prevSessions, newSession].sort((a, b) => a.date.localeCompare(b.date));
+        }
+      });
+
+      return next;
+    });
+  };
+
+  const applyRenewQuickPreset = (preset: 'all' | 'weekdays' | 'weekend' | 'clear') => {
+    if (!renewMonthRaw) return;
+    const [year, month] = renewMonthRaw.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const result: string[] = [];
+
+    if (preset === 'clear') {
+      setRenewSpecificDates([]);
+      setRenewScheduledSessions([]);
+      setRenewSessionsCount(12);
+      return;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dObj = new Date(year, month - 1, day);
+      const dayOfWeek = dObj.getDay();
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+      if (preset === 'all') {
+        result.push(dateStr);
+      } else if (preset === 'weekdays' && dayOfWeek >= 1 && dayOfWeek <= 5) {
+        result.push(dateStr);
+      } else if (preset === 'weekend' && (dayOfWeek === 0 || dayOfWeek === 6)) {
+        result.push(dateStr);
+      }
+    }
+    setRenewSpecificDates(result);
+    setRenewSessionsCount(result.length > 0 ? result.length : 12);
+
+    const fac = facilities.find(f => f.id === renewFacilityId) || facilities[0];
+    const sh = shifts.find(s => s.id === renewShiftId) || shifts[0];
+    setRenewScheduledSessions(
+      result.map(d => ({
+        date: d,
+        facilityId: fac.id,
+        facilityName: formatCleanFacilityName(fac.name),
+        shiftId: sh.id,
+        shiftName: sh.name,
+        timeSlot: sh.timeSlot
+      }))
+    );
+  };
+
+  const handleConfirmRenew = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renewModalStudent) return;
+    const [y, m] = (renewMonthRaw || '2026-09').split('-');
+    const renewMonthStr = `Tháng ${m}/${y}`;
+    const sessions = Number(renewSessionsCount) || (renewSpecificDates.length > 0 ? renewSpecificDates.length : 12);
+    const unitPrice = Number(renewUnitPrice) || sessionUnitPrice || 150000;
+    const tuition = sessions * unitPrice;
+
+    renewStudentMonth(
+      renewModalStudent.id,
+      sessions,
+      renewMonthStr,
+      renewStartDate,
+      renewEndDate,
+      renewSpecificDates,
+      tuition,
+      renewScheduledSessions
+    );
+    setRenewModalStudent(null);
+  };
 
   const displayStudents = isCoach ? assignedStudents : students;
 
@@ -159,6 +513,10 @@ export const StudentsView: React.FC = () => {
     const calculatedTuition = sessionsCount * unitPrice;
     const allowedLeavesCount = Math.floor(sessionsCount / 4);
 
+    const uniqueFacs = Array.from(new Set(newScheduledSessions.map(s => s.facilityName).filter(Boolean)));
+    const isMultiFacility = uniqueFacs.length > 1;
+    const finalFacilityName = isMultiFacility ? `Đa cơ sở (${uniqueFacs.length} cơ sở)` : (targetFacility?.name || 'Sân Cầu Lông Cầu Giấy');
+
     addStudent({
       name: newName,
       phone: newPhone,
@@ -171,13 +529,15 @@ export const StudentsView: React.FC = () => {
 
       // Sân & Ca học (Thống nhất Sân và Cơ sở)
       facilityId: targetFacility?.id || 'CS01',
-      facilityName: targetFacility?.name || 'Sân Cầu Lông Cầu Giấy',
-      courtName: targetFacility?.name || 'Sân Cầu Lông Cầu Giấy',
+      facilityName: finalFacilityName,
+      courtName: finalFacilityName,
       fixedShiftId: targetShift?.id,
       fixedShiftName: targetShift?.name || 'Ca Tối 1',
       shiftId: targetShift?.id,
       shiftName: targetShift?.name || 'Ca Tối 1',
       timeSlot: targetShift?.timeSlot || '18:00 - 19:30',
+
+      scheduledSessions: newScheduledSessions,
 
       // Month & Specific Dates
       month: newMonthStr,
@@ -431,11 +791,7 @@ export const StudentsView: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                {currentUser.role !== 'ADMIN' && (
-                  <th className="py-3.5 px-5">Mã HV</th>
-                )}
                 <th className="py-3.5 px-4">Học viên</th>
-                <th className="py-3.5 px-4">SĐT</th>
                 {currentUser.role !== 'FACILITY_MANAGER' && (
                   <th className="py-3.5 px-4">Sân cầu lông</th>
                 )}
@@ -443,7 +799,7 @@ export const StudentsView: React.FC = () => {
                 <th className="py-3.5 px-4 w-52">Tiến độ buổi học</th>
                 <th className="py-3.5 px-4">Học phí</th>
                 <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-5 text-right">Chi tiết</th>
+                <th className="py-3.5 px-5 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
@@ -451,8 +807,7 @@ export const StudentsView: React.FC = () => {
                 <tr>
                   <td
                     colSpan={
-                      7 +
-                      (currentUser.role !== 'ADMIN' ? 1 : 0) +
+                      6 +
                       (currentUser.role !== 'FACILITY_MANAGER' ? 1 : 0)
                     }
                     className="py-12 text-center text-slate-400"
@@ -472,13 +827,6 @@ export const StudentsView: React.FC = () => {
                       onClick={() => navigate('students', student.id)}
                       className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
                     >
-                      {currentUser.role !== 'ADMIN' && (
-                        <td className="py-4 px-5">
-                          <span className="font-bold text-[#0F172A] bg-slate-100 px-2.5 py-1 rounded-md text-xs">
-                            {student.code}
-                          </span>
-                        </td>
-                      )}
                       <td className="py-4 px-4 font-bold text-[#0F172A] group-hover:text-[#10B981] transition-colors">
                         <div className="flex items-center gap-2.5">
                           <img
@@ -492,14 +840,17 @@ export const StudentsView: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-4 text-slate-600 text-xs font-medium">
-                        {student.phone}
-                      </td>
                       {currentUser.role !== 'FACILITY_MANAGER' && (
                         <td className="py-4 px-4 text-xs">
-                          <strong className="text-[#0F172A] block flex items-center gap-1">
+                          <strong className="text-[#0F172A] block flex items-center gap-1.5 flex-wrap">
                             <Building2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span>{student.facilityName || student.courtName || 'Sân Cầu Lông Cầu Giấy'}</span>
+                            {student.facilityName?.startsWith('Đa cơ sở') ? (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-purple-100 text-purple-800">
+                                {student.facilityName}
+                              </span>
+                            ) : (
+                              <span>{student.facilityName || student.courtName || 'Sân Cầu Lông Cầu Giấy'}</span>
+                            )}
                           </strong>
                           <span className="text-slate-400 text-[11px]">
                             {student.shiftName || student.fixedShiftName || 'Ca Tối 1'}
@@ -539,8 +890,28 @@ export const StudentsView: React.FC = () => {
                           remaining={student.remainingSessions}
                         />
                       </td>
-                      <td className="py-4 px-5 text-right">
-                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#10B981] group-hover:translate-x-0.5 transition-all inline" />
+                      <td className="py-4 px-5 text-right" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          {!isCoach && (
+                            <button
+                              type="button"
+                              onClick={() => openRenewModal(student)}
+                              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-xs shrink-0"
+                              title="Gia hạn kỳ học mới"
+                            >
+                              <RotateCw className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Gia hạn</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => navigate('students', student.id)}
+                            className="p-1.5 text-slate-400 hover:text-[#10B981] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                            title="Xem chi tiết"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -567,18 +938,11 @@ export const StudentsView: React.FC = () => {
                   <img
                     src={student.avatar}
                     alt={student.name}
-                    className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                    className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0"
                   />
                   <div>
-                    <div className="flex items-center gap-2">
-                      {currentUser.role !== 'ADMIN' && (
-                        <span className="text-xs font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
-                          {student.code}
-                        </span>
-                      )}
-                      <h3 className="font-bold text-slate-900 text-sm">{student.name}</h3>
-                    </div>
-                    <div className="text-xs text-slate-500">{student.phone}</div>
+                    <h3 className="font-bold text-slate-900 text-sm">{student.name}</h3>
+                    <div className="text-[11px] text-slate-400 font-normal">{student.className || 'Chưa xếp lớp'}</div>
                   </div>
                 </div>
                 <div>
@@ -588,9 +952,17 @@ export const StudentsView: React.FC = () => {
 
               <div className="p-2.5 bg-slate-50 rounded-xl text-xs space-y-1">
                 {currentUser.role !== 'FACILITY_MANAGER' && (
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-slate-400">Cơ sở & Sân:</span>
-                    <strong className="text-slate-800">{student.facilityName || 'Cơ sở Cầu Giấy'} - {student.courtName || 'Sân 02'}</strong>
+                    <strong className="text-slate-800 flex items-center gap-1">
+                      {student.facilityName?.startsWith('Đa cơ sở') ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-purple-100 text-purple-800">
+                          {student.facilityName}
+                        </span>
+                      ) : (
+                        <span>{student.facilityName || 'Cơ sở Cầu Giấy'} - {student.courtName || 'Sân 02'}</span>
+                      )}
+                    </strong>
                   </div>
                 )}
                 {currentUser.role === 'ADMIN' && (
@@ -617,6 +989,28 @@ export const StudentsView: React.FC = () => {
                   size="sm"
                   showDetails={true}
                 />
+              </div>
+
+              {/* Mobile Actions */}
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100" onClick={e => e.stopPropagation()}>
+                {!isCoach && (
+                  <button
+                    type="button"
+                    onClick={() => openRenewModal(student)}
+                    className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCw className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Gia hạn</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => navigate('students', student.id)}
+                  className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <span>Chi tiết</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           );
@@ -671,16 +1065,16 @@ export const StudentsView: React.FC = () => {
             {currentUser.role !== 'FACILITY_MANAGER' && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Sân cầu lông đăng ký học *
+                  Sân / Cơ sở mặc định *
                 </label>
                 <select
                   value={newFacilityId}
-                  onChange={e => setNewFacilityId(e.target.value)}
+                  onChange={e => handleFacilityChange(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
                 >
                   {facilities.map(f => (
                     <option key={f.id} value={f.id}>
-                      {f.name}
+                      {formatCleanFacilityName(f.name)}
                     </option>
                   ))}
                 </select>
@@ -688,10 +1082,10 @@ export const StudentsView: React.FC = () => {
             )}
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Ca học *</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Ca học mặc định *</label>
               <select
                 value={newShiftId}
-                onChange={e => setNewShiftId(e.target.value)}
+                onChange={e => handleShiftChange(e.target.value)}
                 className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
               >
                 {shifts.map(s => (
@@ -711,9 +1105,6 @@ export const StudentsView: React.FC = () => {
                   <Calendar className="w-4 h-4 text-emerald-600" />
                   <span>Chọn Các Ngày Sẽ Học Trong Tháng *</span>
                 </label>
-                <p className="text-[11px] text-slate-500">
-                  Click vào từng ngày học viên muốn học linh hoạt trong tháng (không cố định thứ)
-                </p>
               </div>
 
               {/* Month Selector */}
@@ -734,39 +1125,6 @@ export const StudentsView: React.FC = () => {
                   <option value="2026-11">Tháng 11/2026</option>
                 </select>
               </div>
-            </div>
-
-            {/* Quick Presets */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-emerald-100">
-              <span className="text-[11px] font-bold text-slate-500 mr-1">Gợi ý nhanh:</span>
-              <button
-                type="button"
-                onClick={() => applyQuickPreset('all')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Cả tuần (T2 - CN)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyQuickPreset('weekdays')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Ngày thường (T2 - T6)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyQuickPreset('weekend')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Cuối tuần (T7 - CN)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyQuickPreset('clear')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors cursor-pointer ml-auto"
-              >
-                ✕ Xoá chọn
-              </button>
             </div>
 
             {/* Mini-Calendar Days Grid */}
@@ -827,22 +1185,113 @@ export const StudentsView: React.FC = () => {
             </div>
 
             {/* Dynamic summary */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 font-bold rounded-lg flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  Đã chọn: {specificDates.length} ngày học
-                </span>
-                <span className="px-2.5 py-1 bg-sky-100 text-sky-900 font-bold rounded-lg">
-                  Gói học: {specificDates.length} buổi
-                </span>
-                <span className="px-2.5 py-1 bg-amber-100 text-amber-900 font-bold rounded-lg flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  Quỹ phép: {Math.floor(specificDates.length / 4)} buổi (4 buổi = 1 phép)
-                </span>
-              </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+              <span>Đã chọn: <strong className="text-emerald-700 font-bold">{specificDates.length} ngày</strong> (Quỹ phép: <strong className="text-slate-700">{Math.floor(specificDates.length / 4)} ngày</strong>)</span>
+              {specificDates.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSpecificDates([]);
+                    setNewSessionsCount(12);
+                  }}
+                  className="text-[11px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
+                >
+                  Xoá chọn
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Chi tiết từng buổi học - Tùy chỉnh Cơ sở & Ca học linh hoạt */}
+          {newScheduledSessions.length > 0 && (
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                    Cơ sở & Ca học từng ngày ({newScheduledSessions.length} buổi)
+                  </span>
+                  {new Set(newScheduledSessions.map(s => s.facilityId)).size > 1 ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                      ✨ Đa cơ sở ({new Set(newScheduledSessions.map(s => s.facilityId)).size} cơ sở)
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      1 cơ sở
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={applyDefaultToAllSessions}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"
+                  title="Áp dụng cơ sở và ca học mặc định ở trên cho tất cả các ngày"
+                >
+                  Áp dụng mặc định cho tất cả
+                </button>
+              </div>
+
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 no-scrollbar">
+                {newScheduledSessions.map((sess, idx) => {
+                  const [y, m, d] = sess.date.split('-');
+                  const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+                  const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+                  const dayLabel = dayNames[dateObj.getDay()];
+
+                  return (
+                    <div
+                      key={sess.date}
+                      className="p-2 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs"
+                    >
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
+                          #{idx + 1}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900">
+                          {d}/{m}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          ({dayLabel})
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Facility selector */}
+                        {currentUser.role !== 'FACILITY_MANAGER' && (
+                          <select
+                            value={sess.facilityId}
+                            onChange={e => updateSessionFacility(sess.date, e.target.value)}
+                            aria-label={`Chọn cơ sở cho ngày ${d}/${m}`}
+                            className="px-2 py-1 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 max-w-[140px] truncate cursor-pointer"
+                          >
+                            {facilities.map(f => (
+                              <option key={f.id} value={f.id}>
+                                {formatCleanFacilityName(f.name)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* Shift selector */}
+                        <select
+                          value={sess.shiftId}
+                          onChange={e => updateSessionShift(sess.date, e.target.value)}
+                          aria-label={`Chọn ca học cho ngày ${d}/${m}`}
+                          className="px-2 py-1 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 max-w-[150px] truncate cursor-pointer"
+                        >
+                          {shifts.map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Đơn giá & Số buổi đăng ký */}
           <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
@@ -853,7 +1302,7 @@ export const StudentsView: React.FC = () => {
               <input
                 type="number"
                 min={0}
-                step={10000}
+                step="1"
                 required
                 value={newUnitPrice}
                 onChange={e => setNewUnitPrice(Number(e.target.value))}
@@ -1072,6 +1521,351 @@ export const StudentsView: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Renew Month Modal */}
+      {renewModalStudent && (
+        <Modal
+          isOpen={true}
+          onClose={() => setRenewModalStudent(null)}
+          title={`Gia Hạn Kỳ Học Mới: ${renewModalStudent.name}`}
+          subtitle="Tự động bảo lưu số buổi còn lại và cấp lại số ngày nghỉ phép mới theo quy định"
+        >
+          <form onSubmit={handleConfirmRenew} className="space-y-4 max-h-[75vh] overflow-y-auto no-scrollbar pr-1">
+            {/* Month, Unit price & Sessions */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Kỳ / Tháng mới *
+                </label>
+                <input
+                  type="month"
+                  value={renewMonthRaw}
+                  onChange={e => handleRenewMonthChange(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold bg-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Đơn giá 1 buổi (VNĐ) *
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={renewUnitPrice}
+                  onChange={e => setRenewUnitPrice(Number(e.target.value))}
+                  placeholder="VD: 150000"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold bg-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Số buổi học kỳ mới *
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step="1"
+                  value={renewSessionsCount}
+                  onChange={e => setNewSessionsCount(Number(e.target.value))}
+                  placeholder="VD: 12"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-bold bg-white"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Ngày bắt đầu kỳ mới
+                </label>
+                <input
+                  type="date"
+                  value={renewStartDate}
+                  onChange={e => setRenewStartDate(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Ngày kết thúc kỳ mới
+                </label>
+                <input
+                  type="date"
+                  value={renewEndDate}
+                  onChange={e => setRenewEndDate(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-semibold"
+                />
+              </div>
+            </div>
+
+            {/* Sân / Cơ sở & Ca học mặc định kỳ mới */}
+            <div className={`grid ${currentUser.role === 'FACILITY_MANAGER' ? 'grid-cols-1' : 'grid-cols-2'} gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-100`}>
+              {currentUser.role !== 'FACILITY_MANAGER' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Sân / Cơ sở mặc định
+                  </label>
+                  <select
+                    value={renewFacilityId}
+                    onChange={e => handleRenewFacilityChange(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
+                  >
+                    {facilities.map(f => (
+                      <option key={f.id} value={f.id}>
+                        {formatCleanFacilityName(f.name)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Ca học mặc định
+                </label>
+                <select
+                  value={renewShiftId}
+                  onChange={e => handleRenewShiftChange(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
+                >
+                  {shifts.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Interactive Month Mini-Calendar Picker */}
+            <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  <span>Chọn Các Ngày Sẽ Học Trong Tháng (Kỳ Mới) *</span>
+                </label>
+
+                <span className="text-xs font-bold text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
+                  Tháng {renewMonthRaw ? renewMonthRaw.split('-')[1] + '/' + renewMonthRaw.split('-')[0] : '09/2026'}
+                </span>
+              </div>
+
+              {/* Mini-Calendar Days Grid */}
+              <div className="bg-white p-3 rounded-xl border border-emerald-200/80 shadow-xs">
+                <div className="grid grid-cols-7 gap-1 text-center mb-1.5 pb-1 border-b border-slate-100">
+                  {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w, idx) => (
+                    <div key={w} className={`text-[10px] font-bold ${idx >= 5 ? 'text-rose-500' : 'text-slate-500'}`}>
+                      {w}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Blank days before day 1 */}
+                  {(() => {
+                    if (!renewMonthRaw) return null;
+                    const [y, m] = renewMonthRaw.split('-').map(Number);
+                    const firstDay = new Date(y, m - 1, 1).getDay(); // 0 = Sun
+                    const offset = firstDay === 0 ? 6 : firstDay - 1; // Mon = 0
+                    const blanks = [];
+                    for (let i = 0; i < offset; i++) {
+                      blanks.push(<div key={`blank-${i}`} className="h-8" />);
+                    }
+                    return blanks;
+                  })()}
+
+                  {/* Days of Month */}
+                  {(() => {
+                    if (!renewMonthRaw) return null;
+                    const [y, m] = renewMonthRaw.split('-').map(Number);
+                    const daysInMonth = new Date(y, m, 0).getDate();
+                    const dayElements = [];
+                    for (let d = 1; d <= daysInMonth; d++) {
+                      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      const isSelected = renewSpecificDates.includes(dateStr);
+                      const dayOfWeek = new Date(y, m - 1, d).getDay();
+                      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                      dayElements.push(
+                        <button
+                          type="button"
+                          key={dateStr}
+                          onClick={() => toggleRenewDate(dateStr)}
+                          className={`h-8 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer select-none ${
+                            isSelected
+                              ? 'bg-[#10B981] text-white shadow-xs ring-1 ring-emerald-500 scale-105'
+                              : isWeekend
+                              ? 'bg-slate-50 text-rose-500 hover:bg-emerald-50 hover:text-emerald-700'
+                              : 'bg-slate-50 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
+                          }`}
+                          title={isSelected ? `Đã chọn ngày ${d}` : `Click để chọn ngày ${d}`}
+                        >
+                          {d}
+                        </button>
+                      );
+                    }
+                    return dayElements;
+                  })()}
+                </div>
+              </div>
+
+              {/* Dynamic summary */}
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span>Đã chọn: <strong className="text-emerald-700 font-bold">{renewSpecificDates.length} ngày</strong></span>
+                {renewSpecificDates.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRenewSpecificDates([]);
+                      setRenewSessionsCount(12);
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
+                  >
+                    Xoá chọn
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Chi tiết từng buổi học kỳ mới - Tùy chỉnh Cơ sở & Ca học linh hoạt */}
+            {renewScheduledSessions.length > 0 && (
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      Cơ sở & Ca học từng ngày ({renewScheduledSessions.length} buổi)
+                    </span>
+                    {new Set(renewScheduledSessions.map(s => s.facilityId)).size > 1 ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                        ✨ Đa cơ sở ({new Set(renewScheduledSessions.map(s => s.facilityId)).size} cơ sở)
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        1 cơ sở
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={applyRenewDefaultToAll}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"
+                    title="Áp dụng cơ sở và ca học mặc định ở trên cho tất cả các ngày"
+                  >
+                    Áp dụng mặc định cho tất cả
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 no-scrollbar">
+                  {renewScheduledSessions.map((sess, idx) => {
+                    const [y, m, d] = sess.date.split('-');
+                    const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+                    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+                    const dayLabel = dayNames[dateObj.getDay()];
+
+                    return (
+                      <div
+                        key={sess.date}
+                        className="p-2 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs"
+                      >
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
+                            #{idx + 1}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900">
+                            {d}/{m}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            ({dayLabel})
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {/* Facility selector */}
+                          {currentUser.role !== 'FACILITY_MANAGER' && (
+                            <select
+                              value={sess.facilityId}
+                              onChange={e => updateRenewSessionFacility(sess.date, e.target.value)}
+                              aria-label={`Chọn cơ sở cho ngày ${d}/${m}`}
+                              className="px-2 py-1 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 max-w-[140px] truncate cursor-pointer"
+                            >
+                              {facilities.map(f => (
+                                <option key={f.id} value={f.id}>
+                                  {formatCleanFacilityName(f.name)}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+
+                          {/* Shift selector */}
+                          <select
+                            value={sess.shiftId}
+                            onChange={e => updateRenewSessionShift(sess.date, e.target.value)}
+                            aria-label={`Chọn ca học cho ngày ${d}/${m}`}
+                            className="px-2 py-1 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 max-w-[150px] truncate cursor-pointer"
+                          >
+                            {shifts.map(s => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Thống kê học phí & buổi gọn gàng */}
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between gap-4">
+              <div className="space-y-1 text-xs">
+                <div className="text-slate-700 font-medium">
+                  Tổng: <strong className="text-slate-900 font-bold">{renewModalStudent.remainingSessions + Number(renewSessionsCount)} buổi</strong>
+                  {renewModalStudent.remainingSessions > 0 && (
+                    <span className="text-emerald-600 font-semibold ml-1.5">(bảo lưu +{renewModalStudent.remainingSessions})</span>
+                  )}
+                  <span className="mx-2 text-slate-300">|</span>
+                  Quỹ phép: <strong className="text-slate-900 font-bold">{Math.floor(Number(renewSessionsCount) / 4)} ngày</strong>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {renewSessionsCount} buổi × {(Number(renewUnitPrice) || 0).toLocaleString('vi-VN')}đ
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Học phí kỳ mới</span>
+                <span className="text-xl font-black text-emerald-600">
+                  {((Number(renewSessionsCount) || 0) * (Number(renewUnitPrice) || 0)).toLocaleString('vi-VN')}đ
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setRenewModalStudent(null)}
+                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                <RotateCw className="w-4 h-4" />
+                <span>Xác Nhận Gia Hạn Tháng Mới</span>
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };

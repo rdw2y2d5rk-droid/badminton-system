@@ -18,7 +18,9 @@ import {
   Shield,
   Building2,
   Search,
-  Plus
+  Plus,
+  Bell,
+  MessageSquare
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AttendanceStatus, CoachAttendanceRecord } from '../types';
@@ -43,6 +45,7 @@ export const AttendanceView: React.FC = () => {
     assignedSessions,
     attendanceTarget,
     setAttendanceTarget,
+    getDailyClasses,
     showToast
   } = useApp();
 
@@ -104,6 +107,24 @@ export const AttendanceView: React.FC = () => {
   );
   const targetSession = facilitySessions[0] || sessions.find(s => s.facilityId === selectedFacilityId && s.date === selectedDate);
   const sessionMakeupStudents = targetSession?.makeupStudents || [];
+
+  // Danh sách các ca học thực tế hôm nay tại cơ sở này để lấy ghi chú nhắc nhở từ Quản lý
+  const facilityDailyClasses = useMemo(() => {
+    return getDailyClasses(selectedFacilityId, selectedDate);
+  }, [getDailyClasses, selectedFacilityId, selectedDate]);
+
+  const activeClassNotes = useMemo(() => {
+    return facilityDailyClasses
+      .filter(c => Boolean(c.preSessionNote))
+      .map(c => ({
+        classId: c.id,
+        shiftName: c.shiftName || c.scheduleDaysText,
+        timeSlot: c.timeSlot,
+        court: c.court,
+        coachName: c.coachName,
+        note: c.preSessionNote
+      }));
+  }, [facilityDailyClasses]);
 
   // Thứ trong tuần theo ngày được chọn
   const dayOfWeekMap = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
@@ -220,6 +241,21 @@ export const AttendanceView: React.FC = () => {
   }, [facilitySessions, facilityClasses, coaches, selectedDayOfWeek, selectedFacilityId, selectedDate, sessions, isCoach, currentUser]);
 
   const classStudents = students.filter(student => {
+    // 1. Nếu học viên có lịch học chi tiết từng buổi theo ngày & cơ sở & ca (scheduledSessions)
+    if (student.scheduledSessions && student.scheduledSessions.length > 0) {
+      const todaySession = student.scheduledSessions.find(s => s.date === selectedDate);
+      if (!todaySession) return false; // Không có lịch học vào ngày đang chọn
+      if (todaySession.facilityId !== selectedFacilityId) return false; // Không học ở cơ sở đang chọn vào ngày hôm nay
+
+      // Nếu là HLV, chỉ lọc học viên lớp mình phụ trách
+      if (isCoach && assignedClasses.length > 0) {
+        const isAssigned = assignedClasses.some(ac => ac.id === student.classId) || student.coachId === currentUser.coachId;
+        if (!isAssigned) return false;
+      }
+
+      return true;
+    }
+
     const isSameFacility =
       student.facilityId === selectedFacilityId ||
       facilityClassIds.includes(student.classId) ||
@@ -501,26 +537,26 @@ export const AttendanceView: React.FC = () => {
 
         {/* Action Buttons (Session Mode) */}
         {viewTab === 'session' && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
             {!isCoach && !(isFacilityManager && isStudentAttendanceDone) && (
               <button
                 onClick={() => setIsMakeupModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-md shadow-amber-900/15 transition-all cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer whitespace-nowrap"
               >
-                <UserPlus className="w-4 h-4" />
-                <span>+ Thêm Học Bù</span>
+                <UserPlus className="w-4 h-4 shrink-0" />
+                <span>THÊM HỌC BÙ</span>
               </button>
             )}
 
             <button
               onClick={handleApproveAllStudentsAndCoaches}
-              className="flex items-center gap-2 px-6 py-3 bg-[#10B981] hover:bg-emerald-600 active:scale-95 text-white font-extrabold text-sm rounded-2xl shadow-md shadow-emerald-900/20 transition-all cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#10B981] hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer whitespace-nowrap"
             >
-              <CheckCheck className="w-5 h-5" />
+              <CheckCheck className="w-4 h-4 shrink-0" />
               <span>
                 {isEverythingAttended
-                  ? (canManageCoachAttendance ? '✓ CẬP NHẬT DUYỆT TẤT CẢ (HỌC VIÊN & HLV)' : '✓ CẬP NHẬT ĐIỂM DANH HỌC VIÊN')
-                  : (canManageCoachAttendance ? '✓ DUYỆT ĐIỂM DANH TẤT CẢ HỌC VIÊN & HLV' : '✓ DUYỆT ĐIỂM DANH HỌC VIÊN')}
+                  ? (canManageCoachAttendance ? 'CẬP NHẬT DUYỆT TẤT CẢ (HỌC VIÊN & HLV)' : 'CẬP NHẬT ĐIỂM DANH HỌC VIÊN')
+                  : (canManageCoachAttendance ? 'DUYỆT ĐIỂM DANH TẤT CẢ HỌC VIÊN & HLV' : 'DUYỆT ĐIỂM DANH HỌC VIÊN')}
               </span>
             </button>
           </div>
@@ -652,6 +688,44 @@ export const AttendanceView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Reminder Notes from Management for Coaches on this date */}
+      {activeClassNotes.length > 0 && (
+        <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-3xl space-y-3 shadow-xs animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 text-amber-950 font-black text-sm">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                <Bell className="w-4 h-4 animate-bounce" />
+              </div>
+              <span>Dặn Dò & Nhắc Nhở Từ Quản Lý Cho Ca Dạy Hôm Nay</span>
+            </div>
+            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-950 border border-amber-300">
+              Dành riêng cho HLV
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {activeClassNotes.map(item => (
+              <div
+                key={item.classId}
+                className="p-3 bg-white rounded-2xl border border-amber-200 shadow-2xs space-y-1.5"
+              >
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-extrabold text-[#0F172A]">
+                    {item.shiftName} ({item.timeSlot})
+                  </span>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {item.coachName}
+                  </span>
+                </div>
+                <div className="text-xs text-amber-950 font-semibold p-2.5 bg-amber-50/90 rounded-xl border border-amber-200/80 leading-relaxed">
+                  "{item.note}"
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Coach Attendance Section */}
       <div className="p-5 bg-white rounded-3xl border border-slate-100 shadow-xs space-y-4">
@@ -943,6 +1017,7 @@ export const AttendanceView: React.FC = () => {
             const isExpired = student.remainingSessions === 0;
             const allowedLeaves = student.allowedLeaves ?? Math.floor(student.packageSessions / 4);
             const isOutOfLeaves = (student.usedLeaves || 0) >= allowedLeaves;
+            const todaySession = student.scheduledSessions?.find(s => s.date === selectedDate);
 
             return (
               <div
@@ -974,6 +1049,16 @@ export const AttendanceView: React.FC = () => {
                       {student.className && (
                         <span className="text-xs font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
                           {student.className}
+                        </span>
+                      )}
+                      {student.facilityName?.startsWith('Đa cơ sở') && (
+                        <span className="text-[10px] font-extrabold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">
+                          Đa cơ sở
+                        </span>
+                      )}
+                      {todaySession && (
+                        <span className="text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded flex items-center gap-1">
+                          ⏰ {todaySession.shiftName}{todaySession.timeSlot ? ` (${todaySession.timeSlot})` : ''}
                         </span>
                       )}
                       {student.carriedOverSessions && student.carriedOverSessions > 0 ? (
@@ -1224,23 +1309,6 @@ export const AttendanceView: React.FC = () => {
         </div>
       )}
 
-      {/* Bottom Unified Approval Card */}
-      <div className="p-5 bg-white rounded-3xl border border-slate-100 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="text-xs text-slate-500">
-          Chốt điểm danh đồng thời cho <strong className="text-slate-800">{classStudents.length + sessionMakeupStudents.length} học viên</strong> và <strong className="text-slate-800">{facilityCoachItems.length} Huấn luyện viên</strong> hôm nay.
-        </div>
-        <button
-          onClick={handleApproveAllStudentsAndCoaches}
-          className="w-full sm:w-auto px-6 py-3 bg-[#10B981] hover:bg-emerald-600 active:scale-95 text-white font-extrabold text-sm rounded-2xl shadow-md shadow-emerald-900/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-        >
-          <CheckCheck className="w-5 h-5" />
-          <span>
-            {isEverythingAttended
-              ? (canManageCoachAttendance ? '✓ CẬP NHẬT DUYỆT TẤT CẢ (HỌC VIÊN & HLV)' : '✓ CẬP NHẬT ĐIỂM DANH HỌC VIÊN')
-              : (canManageCoachAttendance ? '✓ DUYỆT ĐIỂM DANH TẤT CẢ HỌC VIÊN & HLV' : '✓ DUYỆT ĐIỂM DANH HỌC VIÊN')}
-          </span>
-        </button>
-      </div>
 
       {/* Floating Bottom Bar on Mobile for Instant 1-tap Save */}
       <div className="fixed bottom-16 left-0 right-0 p-3.5 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-2xl z-30 sm:hidden flex items-center justify-between gap-3">

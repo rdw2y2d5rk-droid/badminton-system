@@ -13,7 +13,8 @@ import {
   Award,
   Zap,
   MapPin,
-  Clock
+  Clock,
+  MessageSquare
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -24,6 +25,7 @@ export const Sidebar: React.FC = () => {
     students,
     sessions,
     payments,
+    chatMessages,
     isCoach,
     isFacilityManager,
     currentUser,
@@ -132,6 +134,17 @@ export const Sidebar: React.FC = () => {
       icon: BarChart3,
       roles: ['ADMIN'], // Admin sees system reports
       badge: null
+    },
+    {
+      id: 'chat',
+      label: 'Kênh Chat Chung',
+      icon: MessageSquare,
+      roles: ['ADMIN', 'COACH', 'FACILITY_MANAGER'],
+      badge: (
+        <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-emerald-500 text-white">
+          {chatMessages.length}
+        </span>
+      )
     },
     {
       id: 'settings',

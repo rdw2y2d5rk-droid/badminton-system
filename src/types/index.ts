@@ -69,8 +69,9 @@ export interface BadmintonClass {
   coachIds?: string[];
   coaches?: Coach[];
   shiftId?: string;
+  shiftName?: string;
   scheduleDays: string[]; // e.g. ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
-  scheduleDaysText: string; // "T2 - CN"
+  scheduleDaysText: string; // "Ca Sáng 1"
   timeSlot: string; // "18:00 - 19:30"
   court: string; // "Sân 02"
   maxStudents: number;
@@ -81,6 +82,8 @@ export interface BadmintonClass {
   totalSessions: number; // default package length e.g. 12
   description: string;
   startDate: string;
+  preSessionNote?: string; // Ghi chú nhắc nhở trước buổi học từ Admin / Quản lý cơ sở cho HLV
+  note?: string; // alias
 }
 
 export type PaymentStatus = 'Paid' | 'Unpaid' | 'Overdue';
@@ -101,6 +104,16 @@ export interface StudentAttendanceHistoryItem {
   note?: string;
 }
 
+// Chi tiết buổi học cụ thể (Hỗ trợ học viên đăng ký nhiều cơ sở & nhiều ca khác nhau)
+export interface ScheduledSession {
+  date: string; // 'YYYY-MM-DD', ví dụ: '2026-08-03'
+  facilityId: string; // 'CS01'
+  facilityName: string; // 'Sân Cầu Lông Cầu Giấy'
+  shiftId: string; // 'CA04'
+  shiftName: string; // 'Ca Tối 1'
+  timeSlot?: string; // '18:00 - 19:30'
+}
+
 export interface Student {
   id: string;
   code: string; // "HV001"
@@ -112,6 +125,9 @@ export interface Student {
   className?: string;
   coachId?: string;
   coachName?: string;
+
+  // Danh sách từng buổi học cụ thể kèm sân & ca học (Đa cơ sở & Đa ca)
+  scheduledSessions?: ScheduledSession[];
 
   // Lịch học theo ngày cụ thể trong tháng (không cố định thứ nữa)
   specificDates?: string[]; // e.g. ['2026-08-03', '2026-08-05', '2026-08-10', ...]
@@ -271,6 +287,15 @@ export interface NotificationItem {
   time: string;
   read: boolean;
   type: 'warning' | 'info' | 'success' | 'alert';
+  targetRole?: UserRole;
+  targetUserId?: string;
+  targetCoachId?: string;
+  targetCoachName?: string;
+  facilityName?: string;
+  shiftName?: string;
+  timeSlot?: string;
+  noteContent?: string;
+  senderName?: string;
   linkTo?: {
     tab: string;
     id?: string;
@@ -295,5 +320,31 @@ export interface AdminNotification {
   specificDates?: string[];
   status: 'unread' | 'read' | 'confirmed';
   createdAt: string;
+}
+
+// Kênh Chat Chung Toàn Hệ Thống (Admin, Quản lý cơ sở, HLV)
+export interface ChatReaction {
+  emoji: string; // '✅', '👍', '🏸', '❤️'
+  label: string; // 'Đã xác nhận', 'Đã rõ', 'Sẵn sàng'
+  userId: string;
+  userName: string;
+  userRole: UserRole;
+  userAvatar?: string;
+  timestamp: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: UserRole;
+  senderAvatar: string;
+  facilityName?: string;
+  content: string;
+  timestamp: string;
+  createdAt: number;
+  isNotice?: boolean; // Yêu cầu xác nhận / Thông báo quan trọng
+  reactions: ChatReaction[];
+  mentions?: string[]; // Danh sách userId hoặc userName được tag
 }
 

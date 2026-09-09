@@ -20,12 +20,13 @@ import {
   RotateCw,
   CalendarCheck,
   Sparkles,
-  Check
+  Check,
+  Edit3
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AttendanceStatusBadge, PaymentBadge, StudentStatusBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
-import { PaymentItem } from '../types';
+import { PaymentItem, ScheduledSession } from '../types';
 
 interface StudentDetailViewProps {
   studentId: string;
@@ -36,10 +37,13 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
   const {
     students,
     classes,
+    facilities,
+    shifts,
     payments,
     sessionUnitPrice,
     addSessionsToStudent,
     renewStudentMonth,
+    updateStudentSession,
     confirmPayment,
     editStudent,
     currentUser,
@@ -64,6 +68,8 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
 
   // Monthly Renewal Modal State
   const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+  const [renewFacilityId, setRenewFacilityId] = useState<string>(facilities[0]?.id || 'CS01');
+  const [renewShiftId, setRenewShiftId] = useState<string>(shifts[0]?.id || 'CA04');
   const [renewMonthRaw, setRenewMonthRaw] = useState('2026-09'); // YYYY-MM
   const [renewStartDate, setRenewStartDate] = useState('2026-09-01');
   const [renewEndDate, setRenewEndDate] = useState('2026-09-30');
@@ -71,12 +77,149 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
     '2026-09-02', '2026-09-04', '2026-09-07', '2026-09-09', '2026-09-11', '2026-09-14',
     '2026-09-16', '2026-09-18', '2026-09-21', '2026-09-23', '2026-09-25', '2026-09-28'
   ]);
+  const [renewScheduledSessions, setRenewScheduledSessions] = useState<ScheduledSession[]>([]);
   const [renewUnitPrice, setRenewUnitPrice] = useState<number>(sessionUnitPrice || 150000);
   const [renewSessionsCount, setRenewSessionsCount] = useState<number>(12);
+
+  // Single Session Reschedule / Edit Modal State
+  const [editingSessionIndex, setEditingSessionIndex] = useState<number | null>(null);
+  const [editSessionDate, setEditSessionDate] = useState<string>('');
+  const [editSessionFacilityId, setEditSessionFacilityId] = useState<string>('');
+  const [editSessionShiftId, setEditSessionShiftId] = useState<string>('');
+  const [editSessionReason, setEditSessionReason] = useState<string>('');
 
   const currentStudent = students.find(s => s.id === studentId) || students[0];
   const studentPayments = payments.filter(p => p.studentId === currentStudent.id);
   const studentClass = classes.find(c => c.id === currentStudent.classId);
+
+  const openEditSessionModal = (session: ScheduledSession, index: number) => {
+    setEditingSessionIndex(index);
+    setEditSessionDate(session.date);
+    setEditSessionFacilityId(session.facilityId || facilities[0]?.id || 'CS01');
+    setEditSessionShiftId(session.shiftId || shifts[0]?.id || 'CA04');
+    setEditSessionReason('');
+  };
+
+  // Hàm làm sạch tên cơ sở: Chỉ lấy Cầu Giấy, Ba Đình, Thanh Xuân (loại bỏ tiền tố "Sân Cầu Lông ...", "Cơ sở X - ...")
+  const formatCleanFacilityName = (name?: string): string => {
+    if (!name) return 'Cầu Giấy';
+    return (
+      name
+        .replace(/Sân\s+Cầu\s+Lông\s+/gi, '')
+        .replace(/Cơ\s+sở\s+\d+\s*[-–—:]\s*/gi, '')
+        .replace(/Cơ\s+sở\s+/gi, '')
+        .replace(/^Sân\s+/gi, '')
+        .trim() || 'Cầu Giấy'
+    );
+  };
+
+  const handleSaveSessionEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingSessionIndex === null) return;
+    const targetFac = facilities.find(f => f.id === editSessionFacilityId) || facilities[0];
+    const targetSh = shifts.find(s => s.id === editSessionShiftId) || shifts[0];
+
+    updateStudentSession(
+      currentStudent.id,
+      editingSessionIndex,
+      {
+        date: editSessionDate,
+        facilityId: targetFac.id,
+        facilityName: formatCleanFacilityName(targetFac.name),
+        shiftId: targetSh.id,
+        shiftName: targetSh.name,
+        timeSlot: targetSh.timeSlot
+      },
+      editSessionReason.trim() ? editSessionReason.trim() : undefined
+    );
+
+    setEditingSessionIndex(null);
+  };
+
+  const getWeekdayLabel = (dateStr: string) => {
+    try {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const day = dt.getDay();
+      if (day === 0) return 'CN';
+      return `T${day + 1}`;
+    } catch {
+      return '';
+    }
+  };
+
+  const updateRenewSessionFacility = (dateStr: string, facilityId: string) => {
+    const fac = facilities.find(f => f.id === facilityId) || facilities[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => (s.date === dateStr ? { ...s, facilityId: fac.id, facilityName: fac.name } : s))
+    );
+  };
+
+  const updateRenewSessionShift = (dateStr: string, shiftId: string) => {
+    const sh = shifts.find(s => s.id === shiftId) || shifts[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => (s.date === dateStr ? { ...s, shiftId: sh.id, shiftName: sh.name, timeSlot: sh.timeSlot } : s))
+    );
+  };
+
+  const handleRenewFacilityChange = (facId: string) => {
+    setRenewFacilityId(facId);
+    const fac = facilities.find(f => f.id === facId) || facilities[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        facilityId: fac.id,
+        facilityName: formatCleanFacilityName(fac.name)
+      }))
+    );
+  };
+
+  const handleRenewShiftChange = (shiftId: string) => {
+    setRenewShiftId(shiftId);
+    const sh = shifts.find(s => s.id === shiftId) || shifts[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        shiftId: sh.id,
+        shiftName: sh.name,
+        timeSlot: sh.timeSlot
+      }))
+    );
+  };
+
+  const applyRenewDefaultToAll = () => {
+    const fac = facilities.find(f => f.id === renewFacilityId) || facilities[0];
+    const sh = shifts.find(s => s.id === renewShiftId) || shifts[0];
+    setRenewScheduledSessions(prev =>
+      prev.map(s => ({
+        ...s,
+        facilityId: fac.id,
+        facilityName: formatCleanFacilityName(fac.name),
+        shiftId: sh.id,
+        shiftName: sh.name,
+        timeSlot: sh.timeSlot
+      }))
+    );
+  };
+
+  const openRenewModal = () => {
+    const defaultFac = facilities.find(f => f.id === currentStudent.facilityId) || facilities[0];
+    const defaultShift = shifts.find(s => s.id === (currentStudent.shiftId || currentStudent.fixedShiftId)) || shifts[3] || shifts[0];
+    setRenewFacilityId(defaultFac.id);
+    setRenewShiftId(defaultShift.id);
+
+    setRenewScheduledSessions(
+      renewSpecificDates.map(d => ({
+        date: d,
+        facilityId: defaultFac.id,
+        facilityName: formatCleanFacilityName(defaultFac.name),
+        shiftId: defaultShift.id,
+        shiftName: defaultShift.name,
+        timeSlot: defaultShift.timeSlot
+      }))
+    );
+    setIsRenewModalOpen(true);
+  };
 
   const handleRenewMonthChange = (monthVal: string) => {
     setRenewMonthRaw(monthVal);
@@ -85,12 +228,56 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
     const lastDay = new Date(y, m, 0).getDate();
     setRenewStartDate(`${monthVal}-01`);
     setRenewEndDate(`${monthVal}-${String(lastDay).padStart(2, '0')}`);
+
+    const result: string[] = [];
+    for (let day = 1; day <= lastDay; day++) {
+      const dObj = new Date(y, m - 1, day);
+      const dayOfWeek = dObj.getDay();
+      if (dayOfWeek >= 1 && dayOfWeek <= 5 && result.length < 12) {
+        result.push(`${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+      }
+    }
+    setRenewSpecificDates(result);
+    setRenewSessionsCount(result.length > 0 ? result.length : 12);
+
+    const fac = facilities.find(f => f.id === renewFacilityId) || facilities[0];
+    const sh = shifts.find(s => s.id === renewShiftId) || shifts[0];
+    setRenewScheduledSessions(
+      result.map(d => ({
+        date: d,
+        facilityId: fac.id,
+        facilityName: formatCleanFacilityName(fac.name),
+        shiftId: sh.id,
+        shiftName: sh.name,
+        timeSlot: sh.timeSlot
+      }))
+    );
   };
 
   const toggleRenewDate = (dateStr: string) => {
     setRenewSpecificDates(prev => {
-      const next = prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort();
+      const isRemoving = prev.includes(dateStr);
+      const next = isRemoving ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort();
       setRenewSessionsCount(next.length > 0 ? next.length : 12);
+
+      setRenewScheduledSessions(prevSessions => {
+        if (isRemoving) {
+          return prevSessions.filter(s => s.date !== dateStr);
+        } else {
+          const fac = facilities.find(f => f.id === renewFacilityId) || facilities[0];
+          const sh = shifts.find(s => s.id === renewShiftId) || shifts[0];
+          const newSession: ScheduledSession = {
+            date: dateStr,
+            facilityId: fac.id,
+            facilityName: formatCleanFacilityName(fac.name),
+            shiftId: sh.id,
+            shiftName: sh.name,
+            timeSlot: sh.timeSlot
+          };
+          return [...prevSessions, newSession].sort((a, b) => a.date.localeCompare(b.date));
+        }
+      });
+
       return next;
     });
   };
@@ -103,6 +290,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
 
     if (preset === 'clear') {
       setRenewSpecificDates([]);
+      setRenewScheduledSessions([]);
       setRenewSessionsCount(12);
       return;
     }
@@ -122,6 +310,19 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
     }
     setRenewSpecificDates(result);
     setRenewSessionsCount(result.length > 0 ? result.length : 12);
+
+    const fac = facilities.find(f => f.id === renewFacilityId) || facilities[0];
+    const sh = shifts.find(s => s.id === renewShiftId) || shifts[0];
+    setRenewScheduledSessions(
+      result.map(d => ({
+        date: d,
+        facilityId: fac.id,
+        facilityName: formatCleanFacilityName(fac.name),
+        shiftId: sh.id,
+        shiftName: sh.name,
+        timeSlot: sh.timeSlot
+      }))
+    );
   };
 
   const handleConfirmAddSessions = (e: React.FormEvent) => {
@@ -150,7 +351,8 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
       renewStartDate,
       renewEndDate,
       renewSpecificDates,
-      tuition
+      tuition,
+      renewScheduledSessions
     );
     setIsRenewModalOpen(false);
   };
@@ -221,9 +423,6 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
             />
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black bg-[#0F172A] text-white px-2 py-0.5 rounded-md">
-                  {currentStudent.code}
-                </span>
                 <h1 className="text-2xl font-extrabold text-[#0F172A] tracking-tight">
                   {currentStudent.name}
                 </h1>
@@ -244,40 +443,6 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
                   <Calendar className="w-3.5 h-3.5 text-slate-400" /> Tham gia: {currentStudent.joinedDate}
                 </span>
               </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 shrink-0">
-            <div className="space-y-1">
-              <div className="text-xs text-slate-400 font-semibold uppercase">Lớp đang theo học</div>
-              {currentStudent.classId ? (
-                <div
-                  onClick={() => navigate('classes', currentStudent.classId)}
-                  className="text-base font-extrabold text-[#0F172A] hover:text-[#10B981] cursor-pointer flex items-center gap-1 transition-colors"
-                >
-                  {currentStudent.className}
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
-                </div>
-              ) : (
-                <div className="text-base font-bold text-slate-400">
-                  {currentStudent.className || 'Chưa xếp lớp'}
-                </div>
-              )}
-              <div className="text-xs text-slate-500">
-                HLV: <strong className="text-slate-800">{currentStudent.coachName || 'Chưa phân công'}</strong>
-              </div>
-              {!isCoach && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTargetAssignClassId(currentStudent.classId || classes[0]?.id || '');
-                    setIsAssignClassModalOpen(true);
-                  }}
-                  className="mt-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 underline block cursor-pointer"
-                >
-                  {currentStudent.classId ? 'Chuyển lớp khác' : '+ Gán vào lớp học'}
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -346,77 +511,261 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
         {/* Fixed Schedule & Leave Quota Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
           {/* Sân & Ngày học cụ thể */}
-          <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold uppercase tracking-wider">
-                <Building2 className="w-4 h-4" />
-                <span>Sân Cầu Lông & Lịch Học Trong Tháng</span>
+          <div className="p-5 rounded-3xl bg-white border border-slate-200/90 text-[#0F172A] flex flex-col justify-between space-y-4 shadow-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
+                    Sân Cầu Lông & Lịch Học Trong Tháng
+                  </h4>
+                  <p className="text-[11px] text-slate-500">Phân bổ cơ sở & ca học theo ngày</p>
+                </div>
               </div>
-              <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-bold">
+              <span className="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full font-bold">
                 {currentStudent.month || 'Tháng 08/2026'}
               </span>
             </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Sân cầu lông:</span>
-                <span className="font-bold text-white text-right">
-                  {currentStudent.facilityName || currentStudent.courtName || 'Sân Cầu Lông Cầu Giấy'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Ca học:</span>
-                <span className="font-bold text-emerald-300">
-                  {currentStudent.fixedShiftName || currentStudent.shiftName || 'Ca Tối 1'}
-                </span>
+
+            <div className="space-y-3 text-xs">
+              {/* Facility & Shift Overview */}
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 py-1 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Sân / Cơ sở đăng ký:</span>
+                  <div className="flex items-center gap-1.5 flex-wrap sm:justify-end">
+                    {(() => {
+                      const facilityCounts = (currentStudent.scheduledSessions || []).reduce<Record<string, number>>((acc, s) => {
+                        const name = formatCleanFacilityName(s.facilityName);
+                        acc[name] = (acc[name] || 0) + 1;
+                        return acc;
+                      }, {});
+                      const facKeys = Object.keys(facilityCounts);
+
+                      if (facKeys.length > 1) {
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-100 text-purple-700 border border-purple-200">
+                              Đa cơ sở ({facKeys.length})
+                            </span>
+                            {facKeys.map(k => (
+                              <span key={k} className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700">
+                                {k} <span className="text-emerald-600 font-extrabold">({facilityCounts[k]})</span>
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return (
+                        <span className="font-bold text-[#0F172A]">
+                          {formatCleanFacilityName(currentStudent.facilityName || currentStudent.courtName)}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Ca học:</span>
+                  <div>
+                    {(() => {
+                      const uniqueShifts = Array.from(
+                        new Set((currentStudent.scheduledSessions || []).map(s => s.shiftName).filter(Boolean))
+                      );
+                      if (uniqueShifts.length > 1) {
+                        return (
+                          <span className="font-bold text-emerald-700 text-xs">
+                            Đa ca linh hoạt ({uniqueShifts.join(', ')})
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="font-bold text-emerald-700 text-xs">
+                          {uniqueShifts[0] || currentStudent.fixedShiftName || currentStudent.shiftName || 'Ca Tối 1'}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
               </div>
 
+              {/* Upcoming session highlight */}
+              {(() => {
+                const upcoming = currentStudent.scheduledSessions
+                  ?.filter(s => s.date >= '2026-08-03')
+                  .sort((a, b) => a.date.localeCompare(b.date))[0];
+                if (!upcoming) return null;
+                const [y, m, d] = upcoming.date.split('-');
+                const weekday = getWeekdayLabel(upcoming.date);
+                const isToday = upcoming.date === '2026-08-03';
+                return (
+                  <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/80 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider">
+                            {isToday ? 'Buổi học hôm nay' : 'Buổi tiếp theo'}
+                          </span>
+                          {isToday && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-600 text-white animate-pulse">
+                              HÔM NAY
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm font-extrabold text-[#0F172A] flex items-center gap-1.5">
+                          <span>{d}/{m}/{y}</span>
+                          <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                            {weekday}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-[#0F172A] text-xs">
+                        {formatCleanFacilityName(upcoming.facilityName)}
+                      </div>
+                      <div className="text-[11px] font-medium text-slate-600">
+                        {upcoming.shiftName}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Specific Dates List */}
-              <div className="pt-1.5 border-t border-slate-800">
-                <span className="text-slate-400 block mb-1">
-                  Các ngày học cụ thể ({currentStudent.specificDates?.length || currentStudent.packageSessions} ngày):
-                </span>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {currentStudent.specificDates && currentStudent.specificDates.length > 0 ? (
-                    currentStudent.specificDates.map(d => (
-                      <span key={d} className="px-2 py-0.5 bg-slate-800 text-emerald-300 rounded text-[11px] font-bold">
-                        {d.split('-')[2]}/{d.split('-')[1]}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-slate-400">Lịch học T2 - CN linh hoạt theo ngày</span>
-                  )}
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-700">
+                    Lịch chi tiết ({currentStudent.scheduledSessions?.length || currentStudent.specificDates?.length || currentStudent.packageSessions} buổi):
+                  </span>
+                  <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    <Edit3 className="w-3 h-3" /> Bấm buổi để đổi sân / ca
+                  </span>
                 </div>
+
+                {currentStudent.scheduledSessions && currentStudent.scheduledSessions.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1 no-scrollbar">
+                    {currentStudent.scheduledSessions.map((s, idx) => {
+                      const isToday = s.date === '2026-08-03';
+                      const [y, m, d] = s.date.split('-');
+                      const weekday = getWeekdayLabel(s.date);
+                      const isPast = s.date < '2026-08-03';
+                      return (
+                        <div
+                          key={s.date + idx}
+                          onClick={() => openEditSessionModal(s, idx)}
+                          className={`group p-2 rounded-xl border text-xs flex flex-col justify-between transition-all cursor-pointer hover:border-emerald-400 hover:shadow-xs hover:-translate-y-0.5 ${
+                            isToday
+                              ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/30 shadow-xs'
+                              : isPast
+                              ? 'bg-slate-50/70 border-slate-200 text-slate-500 hover:bg-white'
+                              : 'bg-white border-slate-200/90'
+                          }`}
+                          title={`Bấm để đổi sân, ca học hoặc dời ngày cho buổi ${d}/${m}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`font-black ${isToday ? 'text-emerald-700 font-extrabold' : isPast ? 'text-slate-500' : 'text-slate-800'}`}>
+                              {d}/{m}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                isToday
+                                  ? 'bg-emerald-600 text-white'
+                                  : isPast
+                                  ? 'bg-slate-200 text-slate-600'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {weekday}
+                              </span>
+                              <Edit3 className="w-3 h-3 text-slate-300 group-hover:text-emerald-600 transition-colors" />
+                            </div>
+                          </div>
+                          <div className="mt-1 flex flex-col gap-0.5">
+                            <span className="text-[11px] font-bold text-slate-700 truncate" title={s.facilityName}>
+                              {formatCleanFacilityName(s.facilityName)}
+                            </span>
+                            <span className="text-[10px] text-slate-500 truncate" title={s.shiftName}>
+                              {s.shiftName}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {currentStudent.specificDates && currentStudent.specificDates.length > 0 ? (
+                      currentStudent.specificDates.map((d, dIdx) => {
+                        const [y, m, day] = d.split('-');
+                        const weekday = getWeekdayLabel(d);
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => {
+                              const fac = facilities.find(f => f.name === currentStudent.facilityName) || facilities[0];
+                              const sh = shifts.find(s => s.name === currentStudent.shiftName) || shifts[0];
+                              openEditSessionModal(
+                                {
+                                  date: d,
+                                  facilityId: fac.id,
+                                  facilityName: fac.name,
+                                  shiftId: sh.id,
+                                  shiftName: sh.name,
+                                  timeSlot: sh.timeSlot
+                                },
+                                dIdx
+                              );
+                            }}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                            title="Bấm để đổi sân hoặc ca học"
+                          >
+                            <span>{day}/{m}</span>
+                            <span className="text-[10px] text-slate-400">({weekday})</span>
+                            <Edit3 className="w-2.5 h-2.5 text-slate-400" />
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <span className="text-slate-400 text-xs">Lịch học T2 - CN linh hoạt theo ngày</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Leave Quota (4 sessions = 1 leave) */}
-          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-950 flex flex-col justify-between">
+          <div className="p-5 rounded-3xl bg-amber-50/70 border border-amber-200/80 text-amber-950 flex flex-col justify-between shadow-xs">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-amber-900 font-bold uppercase tracking-wider">
                 <Shield className="w-4 h-4 text-amber-600" />
                 <span>Quy luật nghỉ phép (4 buổi = 1 phép)</span>
               </div>
-              <span className="text-[10px] bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full font-black">
+              <span className="text-[10px] bg-amber-200/80 text-amber-900 px-2.5 py-1 rounded-full font-black">
                 Bảo lưu số buổi
               </span>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-              <div className="p-2 bg-white/90 rounded-xl border border-amber-200">
+              <div className="p-3 bg-white/90 rounded-2xl border border-amber-200 shadow-xs">
                 <div className="text-[10px] text-slate-500 font-semibold uppercase">Được phép</div>
-                <div className="text-base font-black text-amber-900">
+                <div className="text-base font-black text-amber-900 mt-0.5">
                   {currentStudent.allowedLeaves ?? Math.floor(currentStudent.packageSessions / 4)} buổi
                 </div>
               </div>
-              <div className="p-2 bg-white/90 rounded-xl border border-amber-200">
+              <div className="p-3 bg-white/90 rounded-2xl border border-amber-200 shadow-xs">
                 <div className="text-[10px] text-slate-500 font-semibold uppercase">Đã dùng</div>
-                <div className="text-base font-black text-rose-600">
+                <div className="text-base font-black text-rose-600 mt-0.5">
                   {currentStudent.usedLeaves || 0} buổi
                 </div>
               </div>
-              <div className="p-2 bg-white/90 rounded-xl border border-amber-200">
+              <div className="p-3 bg-white/90 rounded-2xl border border-amber-200 shadow-xs">
                 <div className="text-[10px] text-slate-500 font-semibold uppercase">Còn lại</div>
-                <div className="text-base font-black text-emerald-600">
+                <div className="text-base font-black text-emerald-600 mt-0.5">
                   {Math.max(
                     0,
                     (currentStudent.allowedLeaves ?? Math.floor(currentStudent.packageSessions / 4)) -
@@ -426,8 +775,8 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
                 </div>
               </div>
             </div>
-            <div className="text-[11px] text-amber-800/90 mt-2 font-medium leading-tight">
-              * Nghỉ có phép bảo lưu số buổi không trừ. Toàn bộ buổi thừa sẽ được cộng dồn (bảo lưu) khi gia hạn tháng mới.
+            <div className="text-[11px] text-amber-800/90 mt-3 font-medium leading-relaxed bg-white/60 p-2.5 rounded-xl border border-amber-200/60">
+              💡 <strong>Chính sách trung tâm:</strong> Nghỉ có báo trước theo quy định được bảo lưu 100% số buổi thừa sang chu kỳ gia hạn tiếp theo.
             </div>
           </div>
         </div>
@@ -436,7 +785,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
       {/* Tabs */}
       <div className="flex border-b border-slate-100 bg-white px-4 sm:px-6 rounded-2xl shadow-xs overflow-x-auto whitespace-nowrap">
         {[
-          { id: 'profile', label: 'Hồ sơ & Ghi chú' },
+          { id: 'profile', label: 'Thông tin cá nhân' },
           { id: 'attendance', label: `Lịch sử điểm danh (${currentStudent.attendanceHistory?.length || 0})` },
           { id: 'payments', label: `Lịch sử học phí (${studentPayments.length})` }
         ].map(tab => (
@@ -454,69 +803,151 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
         ))}
       </div>
 
-      {/* Tab 1: Profile & Notes */}
+      {/* Tab 1: Profile */}
       {activeTab === 'profile' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="p-6 bg-white rounded-3xl border border-slate-100 shadow-xs space-y-4">
-            <h3 className="text-base font-bold text-[#0F172A]">Thông Tin Cá Nhân & Liên Hệ</h3>
-            <div className="space-y-3 text-sm divide-y divide-slate-100">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* Cột 1: Thông tin cá nhân & tài khoản */}
+          <div className="p-6 bg-white rounded-3xl border border-slate-100 shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <UserCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[#0F172A]">Thông Tin Cá Nhân & Liên Hệ</h3>
+                  <p className="text-xs text-slate-500">Hồ sơ học viên và thông tin liên lạc</p>
+                </div>
+              </div>
+              <StudentStatusBadge
+                status={currentStudent.status}
+                remaining={currentStudent.remainingSessions}
+              />
+            </div>
+
+            <div className="space-y-3.5 text-sm divide-y divide-slate-100">
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500 font-medium">Họ và tên:</span>
-                <strong className="text-[#0F172A]">{currentStudent.name}</strong>
+                <strong className="text-[#0F172A] font-bold">{currentStudent.name}</strong>
               </div>
-              {currentUser.role !== 'ADMIN' && (
-                <div className="flex justify-between pt-2">
-                  <span className="text-slate-500 font-medium">Mã học viên:</span>
-                  <strong className="text-[#0F172A]">{currentStudent.code}</strong>
-                </div>
-              )}
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500 font-medium">Số điện thoại:</span>
                 <strong className="text-[#0F172A]">{currentStudent.phone}</strong>
               </div>
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500 font-medium">Email:</span>
-                <strong className="text-[#0F172A]">{currentStudent.email}</strong>
+                <span className="font-medium text-slate-700">{currentStudent.email || 'Chưa cập nhật'}</span>
               </div>
               <div className="flex justify-between pt-2">
                 <span className="text-slate-500 font-medium">Ngày gia nhập:</span>
                 <strong className="text-[#0F172A]">{currentStudent.joinedDate}</strong>
               </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-slate-500 font-medium">Trình độ học viên:</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {currentStudent.level || 'Cơ bản (Beginner)'}
+                </span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-slate-500 font-medium">Lớp học hiện tại:</span>
+                <span className="font-semibold text-slate-800">
+                  {currentStudent.className || 'Lớp linh hoạt'}
+                </span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-slate-500 font-medium">HLV phụ trách:</span>
+                <span className="font-semibold text-slate-800">
+                  {currentStudent.coachName || 'Huấn luyện viên phụ trách'}
+                </span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-slate-500 font-medium">Cơ sở tập luyện chính:</span>
+                <span className="font-semibold text-slate-800 text-right">
+                  {formatCleanFacilityName(currentStudent.facilityName)}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="p-6 bg-white rounded-3xl border border-slate-100 shadow-xs space-y-4">
-            <h3 className="text-base font-bold text-[#0F172A]">Ghi Chú Chuyên Môn Của HLV</h3>
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm text-slate-700 leading-relaxed">
-              {currentStudent.note ||
-                'Học viên nắm bắt kỹ thuật nhanh, thể lực tốt. Đang hoàn thiện tư thế phông cầu cuối sân và đập cầu góc chéo.'}
-            </div>
-
-            <div className="pt-2">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                Đánh giá chỉ số
-              </h4>
-              <div className="space-y-2">
-                <div>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span>Kỹ thuật cơ bản</span>
-                    <span>8.5 / 10</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div className="bg-[#10B981] h-full rounded-full" style={{ width: '85%' }} />
-                  </div>
+          {/* Cột 2: Tổng quan gói học & quyền lợi */}
+          <div className="p-6 bg-white rounded-3xl border border-slate-100 shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                  <Award className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span>Thể lực & Di chuyển</span>
-                    <span>8.0 / 10</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div className="bg-sky-500 h-full rounded-full" style={{ width: '80%' }} />
-                  </div>
+                  <h3 className="text-base font-bold text-[#0F172A]">Tổng Quan Gói Học & Quyền Lợi</h3>
+                  <p className="text-xs text-slate-500">Chính sách bảo lưu và tiến độ rèn luyện</p>
                 </div>
               </div>
+              <span className="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full font-bold">
+                {currentStudent.month || 'Tháng 08/2026'}
+              </span>
             </div>
+
+            {/* Attendance Progress Bar */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-slate-600">Tiến độ tập luyện kỳ này</span>
+                <span className="text-emerald-600 font-extrabold">{attendancePercent}% hoàn thành</span>
+              </div>
+              <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, attendancePercent)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
+                <span>Đã tập: <strong className="text-emerald-700 font-bold">{currentStudent.attendedSessions}</strong> buổi</span>
+                <span>Còn lại: <strong className="text-[#0F172A] font-bold">{currentStudent.remainingSessions}</strong> buổi</span>
+                <span>Tổng gói: <strong className="text-slate-800 font-bold">{currentStudent.packageSessions}</strong> buổi</span>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-sm divide-y divide-slate-100">
+              <div className="flex justify-between pt-2">
+                <span className="text-slate-500 font-medium">Buổi bảo lưu từ tháng trước:</span>
+                <span className="font-bold text-emerald-600">
+                  +{currentStudent.carriedOverSessions || 0} buổi bảo lưu
+                </span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-slate-500 font-medium">Hạn mức nghỉ phép tháng:</span>
+                <span className="font-semibold text-slate-800">
+                  Đã dùng {currentStudent.usedLeaves || 0} / {currentStudent.allowedLeaves ?? Math.floor(currentStudent.packageSessions / 4)} buổi cho phép
+                </span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-slate-500 font-medium">Học phí kỳ này:</span>
+                <span className="font-extrabold text-[#0F172A]">
+                  {(currentStudent.tuitionFee || (currentStudent.packageSessions * (sessionUnitPrice || 150000))).toLocaleString('vi-VN')} đ
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-slate-500 font-medium">Tình trạng học phí:</span>
+                <PaymentBadge status={currentStudent.paymentStatus} />
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            {!isCoach && (
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  onClick={() => setIsRenewModalOpen(true)}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Gia hạn tháng mới</span>
+                </button>
+                <button
+                  onClick={() => setIsAddSessionModalOpen(true)}
+                  className="flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Nạp thêm buổi</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -644,12 +1075,138 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
         </div>
       )}
 
+      {/* Reschedule / Edit Single Session Modal */}
+      <Modal
+        isOpen={editingSessionIndex !== null}
+        onClose={() => setEditingSessionIndex(null)}
+        title="Đổi Lịch & Ca Buổi Tập"
+        subtitle={
+          editingSessionIndex !== null && currentStudent.scheduledSessions?.[editingSessionIndex]
+            ? `Buổi tập #${editingSessionIndex + 1} của học viên ${currentStudent.name}`
+            : undefined
+        }
+        maxWidth="md"
+      >
+        <form onSubmit={handleSaveSessionEdit} className="space-y-3.5">
+          {/* Thông tin lịch hiện tại */}
+          {editingSessionIndex !== null && currentStudent.scheduledSessions?.[editingSessionIndex] && (
+            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 font-bold text-slate-600">
+                  <CalendarCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Lịch hiện tại:</span>
+                </div>
+                <div className="flex items-center gap-1.5 font-bold text-xs">
+                  <span className="text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    {currentStudent.scheduledSessions[editingSessionIndex].date.split('-')[2]}/{currentStudent.scheduledSessions[editingSessionIndex].date.split('-')[1]}
+                  </span>
+                  <span className="text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                    {formatCleanFacilityName(currentStudent.scheduledSessions[editingSessionIndex].facilityName)}
+                  </span>
+                  <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    {currentStudent.scheduledSessions[editingSessionIndex].shiftName}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Ngày học mới */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Ngày học mới
+            </label>
+            <input
+              type="date"
+              value={editSessionDate}
+              onChange={e => setEditSessionDate(e.target.value)}
+              required
+              className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:bg-white font-medium cursor-pointer transition-colors"
+            />
+          </div>
+
+          {/* Cơ sở & Ca học mới */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Cơ sở mới
+              </label>
+              <select
+                value={editSessionFacilityId}
+                onChange={e => setEditSessionFacilityId(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:bg-white font-medium cursor-pointer transition-colors"
+              >
+                {facilities.map(fac => (
+                  <option key={fac.id} value={fac.id}>
+                    {formatCleanFacilityName(fac.name)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Ca học mới
+              </label>
+              <select
+                value={editSessionShiftId}
+                onChange={e => setEditSessionShiftId(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:bg-white font-medium cursor-pointer transition-colors"
+              >
+                {shifts.map(sh => (
+                  <option key={sh.id} value={sh.id}>
+                    {sh.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Lý do thay đổi */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Lý do thay đổi <span className="text-slate-400 font-normal">(tùy chọn)</span>
+            </label>
+            <input
+              type="text"
+              value={editSessionReason}
+              onChange={e => setEditSessionReason(e.target.value)}
+              placeholder="VD: Bận việc cá nhân, xin đổi ca..."
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:bg-white transition-colors"
+            />
+          </div>
+
+          {/* Helper note */}
+          <div className="flex items-center gap-2 p-2.5 bg-emerald-50/70 border border-emerald-100 rounded-xl text-[11px] text-emerald-800">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>Tự động đồng bộ học viên sang bảng <strong>Điểm danh</strong> ca mới.</span>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setEditingSessionIndex(null)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              Xác Nhận Đổi Lịch
+            </button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Add Session Modal */}
       <Modal
         isOpen={isAddSessionModalOpen}
         onClose={() => setIsAddSessionModalOpen(false)}
         title={`Nạp Thêm Buổi Học: ${currentStudent.name}`}
         subtitle="Gia hạn gói tập luyện mới cho học viên"
+        maxWidth="md"
       >
         <form onSubmit={handleConfirmAddSessions} className="space-y-4">
           <div>
@@ -722,7 +1279,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
               <input
                 type="number"
                 min={0}
-                step={10000}
+                step="1"
                 value={renewUnitPrice}
                 onChange={e => setRenewUnitPrice(Number(e.target.value))}
                 placeholder="VD: 150000"
@@ -772,55 +1329,56 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
             </div>
           </div>
 
+          {/* Sân / Cơ sở & Ca học mặc định kỳ mới */}
+          <div className={`grid ${currentUser.role === 'FACILITY_MANAGER' ? 'grid-cols-1' : 'grid-cols-2'} gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-100`}>
+            {currentUser.role !== 'FACILITY_MANAGER' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Sân / Cơ sở mặc định
+                </label>
+                <select
+                  value={renewFacilityId}
+                  onChange={e => handleRenewFacilityChange(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
+                >
+                  {facilities.map(f => (
+                    <option key={f.id} value={f.id}>
+                      {formatCleanFacilityName(f.name)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Ca học mặc định
+              </label>
+              <select
+                value={renewShiftId}
+                onChange={e => handleRenewShiftChange(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-[#10B981] font-bold bg-white"
+              >
+                {shifts.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* Interactive Month Mini-Calendar Picker */}
           <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <label className="block text-xs font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-emerald-600" />
-                  <span>Chọn Các Ngày Sẽ Học Trong Tháng (Kỳ Mới) *</span>
-                </label>
-                <p className="text-[11px] text-slate-500">
-                  Click vào từng ngày học viên muốn học linh hoạt trong tháng
-                </p>
-              </div>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-emerald-600" />
+                <span>Chọn Các Ngày Sẽ Học Trong Tháng (Kỳ Mới) *</span>
+              </label>
 
               <span className="text-xs font-bold text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
                 Tháng {renewMonthRaw ? renewMonthRaw.split('-')[1] + '/' + renewMonthRaw.split('-')[0] : '09/2026'}
               </span>
-            </div>
-
-            {/* Quick Presets */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-emerald-100">
-              <span className="text-[11px] font-bold text-slate-500 mr-1">Gợi ý nhanh:</span>
-              <button
-                type="button"
-                onClick={() => applyRenewQuickPreset('all')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Cả tuần (T2 - CN)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyRenewQuickPreset('weekdays')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Ngày thường (T2 - T6)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyRenewQuickPreset('weekend')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-              >
-                ⚡ Cuối tuần (T7 - CN)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyRenewQuickPreset('clear')}
-                className="px-2.5 py-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors cursor-pointer ml-auto"
-              >
-                ✕ Xoá chọn
-              </button>
             </div>
 
             {/* Mini-Calendar Days Grid */}
@@ -883,78 +1441,135 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
             </div>
 
             {/* Dynamic summary */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 font-bold rounded-lg flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  Đã chọn: {renewSpecificDates.length} ngày học
-                </span>
-                <span className="px-2.5 py-1 bg-sky-100 text-sky-900 font-bold rounded-lg">
-                  Số buổi đăng ký: {renewSessionsCount} buổi
-                </span>
-                <span className="px-2.5 py-1 bg-amber-100 text-amber-900 font-bold rounded-lg flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  Quỹ phép mới: {Math.floor((Number(renewSessionsCount) || 0) / 4)} ngày
-                </span>
-              </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+              <span>Đã chọn: <strong className="text-emerald-700 font-bold">{renewSpecificDates.length} ngày</strong></span>
+              {renewSpecificDates.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenewSpecificDates([]);
+                    setRenewSessionsCount(12);
+                  }}
+                  className="text-[11px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
+                >
+                  Xoá chọn
+                </button>
+              )}
             </div>
-          </div>
-
-          {/* Rollover & Leave Calculation Preview */}
-          <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 space-y-2.5 text-xs">
-            <div className="font-bold text-emerald-950 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>Bảng Tính Tự Động Chuyển Giao & Bảo Lưu</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-slate-700">
-              <div className="p-2 bg-white/80 rounded-xl border border-emerald-100">
-                <span className="text-slate-500 block text-[11px]">Buổi cũ chưa dùng (Bảo lưu):</span>
-                <span className="text-sm font-extrabold text-[#0F172A]">
-                  +{currentStudent.remainingSessions} buổi
-                </span>
+            {/* Chi tiết từng buổi học kỳ mới - Tùy chỉnh Cơ sở & Ca học linh hoạt */}
+            {renewScheduledSessions.length > 0 && (
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      Cơ sở & Ca học từng ngày ({renewScheduledSessions.length} buổi)
+                    </span>
+                    {new Set(renewScheduledSessions.map(s => s.facilityId)).size > 1 ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                        ✨ Đa cơ sở ({new Set(renewScheduledSessions.map(s => s.facilityId)).size} cơ sở)
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        1 cơ sở
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={applyRenewDefaultToAll}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"
+                    title="Áp dụng cơ sở và ca học mặc định ở trên cho tất cả các ngày"
+                  >
+                    Áp dụng mặc định cho tất cả
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 no-scrollbar">
+                  {renewScheduledSessions.map((sess, idx) => {
+                    const [y, m, d] = sess.date.split('-');
+                    const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+                    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+                    const dayLabel = dayNames[dateObj.getDay()];
+
+                    return (
+                      <div
+                        key={sess.date}
+                        className="p-2 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs"
+                      >
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
+                            #{idx + 1}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900">
+                            {d}/{m}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            ({dayLabel})
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {/* Facility selector */}
+                          {currentUser.role !== 'FACILITY_MANAGER' && (
+                            <select
+                              value={sess.facilityId}
+                              onChange={e => updateRenewSessionFacility(sess.date, e.target.value)}
+                              aria-label={`Chọn cơ sở cho ngày ${d}/${m}`}
+                              className="px-2 py-1 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 max-w-[140px] truncate cursor-pointer"
+                            >
+                              {facilities.map(f => (
+                                <option key={f.id} value={f.id}>
+                                  {formatCleanFacilityName(f.name)}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+
+                          {/* Shift selector */}
+                          <select
+                            value={sess.shiftId}
+                            onChange={e => updateRenewSessionShift(sess.date, e.target.value)}
+                            aria-label={`Chọn ca học cho ngày ${d}/${m}`}
+                            className="px-2 py-1 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 max-w-[150px] truncate cursor-pointer"
+                          >
+                            {shifts.map(s => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="p-2 bg-white/80 rounded-xl border border-emerald-100">
-                <span className="text-slate-500 block text-[11px]">Buổi kỳ mới đăng ký:</span>
-                <span className="text-sm font-extrabold text-emerald-600">
-                  +{renewSessionsCount} buổi
-                </span>
+            )}
+
+          {/* Thống kê học phí & buổi gọn gàng */}
+          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between gap-4">
+            <div className="space-y-1 text-xs">
+              <div className="text-slate-700 font-medium">
+                Tổng: <strong className="text-slate-900 font-bold">{currentStudent.remainingSessions + Number(renewSessionsCount)} buổi</strong>
+                {currentStudent.remainingSessions > 0 && (
+                  <span className="text-emerald-600 font-semibold ml-1.5">(bảo lưu +{currentStudent.remainingSessions})</span>
+                )}
+                <span className="mx-2 text-slate-300">|</span>
+                Quỹ phép: <strong className="text-slate-900 font-bold">{Math.floor(Number(renewSessionsCount) / 4)} ngày</strong>
+              </div>
+              <div className="text-[11px] text-slate-400">
+                {renewSessionsCount} buổi × {(Number(renewUnitPrice) || 0).toLocaleString('vi-VN')}đ
               </div>
             </div>
-
-            <div className="p-3 bg-emerald-600 text-white rounded-xl flex items-center justify-between">
-              <div>
-                <span className="text-[11px] text-emerald-100 block">Tổng buổi khả dụng kỳ mới:</span>
-                <span className="text-lg font-black tracking-tight">
-                  {currentStudent.remainingSessions + Number(renewSessionsCount)} Buổi Tập
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[11px] text-emerald-100 block">Phép nghỉ mới (4 buổi = 1 phép):</span>
-                <span className="text-base font-black text-amber-300">
-                  {Math.floor(Number(renewSessionsCount) / 4)} Ngày phép
-                </span>
-              </div>
-            </div>
-
-            {/* Tuition Calculation Card */}
-            <div className="p-3 bg-white/90 rounded-xl border border-emerald-200 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-black text-slate-700 uppercase block">
-                  Tiền học phí kỳ mới tự động tính:
-                </span>
-                <span className="text-[10px] text-slate-500">
-                  = {renewSessionsCount} buổi × {(Number(renewUnitPrice) || 0).toLocaleString('vi-VN')}đ
-                </span>
-              </div>
-              <span className="text-xl font-black text-[#10B981]">
+            <div className="text-right shrink-0">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Học phí kỳ mới</span>
+              <span className="text-xl font-black text-emerald-600">
                 {((Number(renewSessionsCount) || 0) * (Number(renewUnitPrice) || 0)).toLocaleString('vi-VN')}đ
               </span>
             </div>
-
-            <p className="text-[11px] text-emerald-800 italic leading-snug">
-              * Hệ thống sẽ tự động tạo hóa đơn học phí mới ({renewMonthRaw ? `Tháng ${renewMonthRaw.split('-')[1]}/${renewMonthRaw.split('-')[0]}` : 'kỳ mới'}), đưa trạng thái học phí về &quot;Chưa đóng&quot; và reset số ngày phép đã sử dụng về 0.
-            </p>
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -981,6 +1596,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
         isOpen={isAssignClassModalOpen}
         onClose={() => setIsAssignClassModalOpen(false)}
         title="Gán Lớp Cho Học Viên"
+        maxWidth="md"
       >
         <form onSubmit={handleConfirmAssignClass} className="space-y-4">
           <div>
@@ -995,7 +1611,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
               <option value="UNASSIGN">-- Chưa xếp lớp (Tự do theo ca) --</option>
               {classes.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.facilityName || 'Cơ sở'} • HLV {c.coachName})
+                  {c.name} ({formatCleanFacilityName(c.facilityName)} • HLV {c.coachName})
                 </option>
               ))}
             </select>
@@ -1031,6 +1647,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
               })`
             : ''
         }
+        maxWidth="md"
       >
         {confirmingPayment && (
           <form

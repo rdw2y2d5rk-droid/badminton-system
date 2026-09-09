@@ -409,8 +409,8 @@ export const PaymentsView: React.FC = () => {
             <input
               type="number"
               required
-              min={10000}
-              step={10000}
+              min={0}
+              step="1"
               value={tempUnitPrice}
               onChange={e => setTempUnitPrice(Number(e.target.value))}
               className="w-full px-3.5 py-2.5 text-lg font-black text-emerald-600 border border-slate-200 rounded-xl outline-none focus:border-emerald-500"

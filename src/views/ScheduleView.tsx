@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -16,7 +16,10 @@ import {
   Trash2,
   CheckCircle2,
   BellRing,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Bell,
+  MessageSquare,
+  Award
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SessionStatusBadge } from '../components/common/Badge';
@@ -43,7 +46,8 @@ export const ScheduleView: React.FC = () => {
     isCoach,
     isFacilityManager,
     currentUser,
-    assignedSessions
+    assignedSessions,
+    notifications
   } = useApp();
 
   const [viewMode, setViewMode] = useState<'weekly' | 'list'>('weekly');
@@ -54,6 +58,14 @@ export const ScheduleView: React.FC = () => {
 
   // Pending approval students
   const pendingStudents = students.filter(s => s.scheduleStatus === 'pending_admin');
+
+  // Reminders from Management for Coach
+  const coachReminders = useMemo(() => {
+    if (!isCoach) return [];
+    return notifications.filter(
+      n => n.targetRole === 'COACH' && (!n.targetCoachId || n.targetCoachId === currentUser.coachId)
+    );
+  }, [isCoach, notifications, currentUser.coachId]);
 
   // Admin Scheduling Modal
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -87,6 +99,34 @@ export const ScheduleView: React.FC = () => {
     { day: 'Chủ Nhật', date: '2026-08-30', dayNum: '30' }
   ];
 
+  // Hàm làm sạch tên cơ sở: Chỉ lấy Cầu Giấy, Ba Đình, Thanh Xuân (loại bỏ "Sân Cầu Lông ...", "Cơ sở X - ...")
+  const formatCleanFacilityName = (name?: string): string => {
+    if (!name) return 'Cầu Giấy';
+    return (
+      name
+        .replace(/Sân\s+Cầu\s+Lông\s+/gi, '')
+        .replace(/Cơ\s+sở\s+\d+\s*[-–—:]\s*/gi, '')
+        .replace(/Cơ\s+sở\s+/gi, '')
+        .replace(/^Sân\s+/gi, '')
+        .trim() || 'Cầu Giấy'
+    );
+  };
+
+  const getSessionFacilityName = (session: SessionSchedule): string => {
+    let rawName = session.facilityName;
+    if (!rawName && session.facilityId) {
+      rawName = facilities.find(f => f.id === session.facilityId)?.name;
+    }
+    if (!rawName && session.classId) {
+      const cls = classes.find(c => c.id === session.classId);
+      rawName = cls?.facilityName;
+      if (!rawName && cls?.facilityId) {
+        rawName = facilities.find(f => f.id === cls.facilityId)?.name;
+      }
+    }
+    return formatCleanFacilityName(rawName);
+  };
+
   // Phân quyền dữ liệu lịch dạy:
   // - HLV: Chỉ được phép nhìn lịch dạy của mình, không được phép nhìn lịch dạy của người khác
   // - Quản lý sân: Nhìn được hết tất cả ca dạy tại sân của mình
@@ -98,7 +138,8 @@ export const ScheduleView: React.FC = () => {
         s =>
           s.facilityId === (currentUser.facilityId || 'CS01') ||
           (!s.facilityId && (currentUser.facilityId === 'CS01' || !currentUser.facilityId)) ||
-          s.facilityName === (currentUser.facilityName || 'Sân Cầu Lông Cầu Giấy')
+          getSessionFacilityName(s).toLowerCase() ===
+            formatCleanFacilityName(currentUser.facilityName || 'Cầu Giấy').toLowerCase()
       )
     : sessions;
 
@@ -115,11 +156,14 @@ export const ScheduleView: React.FC = () => {
       );
 
   const filteredSessions = displaySessions.filter(session => {
+    const targetFac = facilities.find(f => f.id === selectedFacility);
+    const targetCleanName = targetFac ? formatCleanFacilityName(targetFac.name) : '';
+    const sessionCleanFac = getSessionFacilityName(session);
+
     const matchesFacility =
       selectedFacility === 'ALL' ||
       session.facilityId === selectedFacility ||
-      session.court === facilities.find(f => f.id === selectedFacility)?.name ||
-      session.facilityName === facilities.find(f => f.id === selectedFacility)?.name;
+      (targetCleanName && sessionCleanFac.toLowerCase() === targetCleanName.toLowerCase());
     const matchesCoach =
       selectedCoach === 'ALL' ||
       session.coachId === selectedCoach ||
@@ -132,6 +176,36 @@ export const ScheduleView: React.FC = () => {
   const handleStartAttendance = (classId: string, date: string, sessionId: string) => {
     setAttendanceTarget({ classId, date, sessionId });
     navigate('attendance');
+  };
+
+  // Helper xác định ca học & khung giờ
+  const getShiftInfo = (session: SessionSchedule) => {
+    if (session.shiftId) {
+      const found = shifts.find(s => s.id === session.shiftId);
+      if (found) return found;
+    }
+    if (session.startTime) {
+      const byTime = shifts.find(
+        s => s.startTime === session.startTime || s.timeSlot?.includes(session.startTime)
+      );
+      if (byTime) return byTime;
+    }
+    const hour = parseInt(session.startTime?.split(':')[0] || '18', 10);
+    if (hour < 8) return { id: 'CA01', name: 'Ca Sáng 1', timeSlot: '06:00 - 07:30', startTime: '06:00' };
+    if (hour < 12) return { id: 'CA02', name: 'Ca Sáng 2', timeSlot: '08:00 - 09:30', startTime: '08:00' };
+    if (hour < 18) return { id: 'CA03', name: 'Ca Chiều', timeSlot: '16:30 - 18:00', startTime: '16:30' };
+    if (hour < 19 || (hour === 19 && parseInt(session.startTime?.split(':')[1] || '0', 10) < 30)) {
+      return { id: 'CA04', name: 'Ca Tối 1', timeSlot: '18:00 - 19:30', startTime: '18:00' };
+    }
+    return { id: 'CA05', name: 'Ca Tối 2', timeSlot: '19:30 - 21:00', startTime: '19:30' };
+  };
+
+  // Helper xác định tên sân hiển thị
+  const getCourtDisplay = (session: SessionSchedule) => {
+    if (session.court && session.court.includes('Sân')) {
+      return session.court;
+    }
+    return 'Sân 01';
   };
 
   // Find current Coach profile
@@ -294,7 +368,7 @@ export const ScheduleView: React.FC = () => {
 
           {isFacilityManager && (
             <div className="px-3.5 py-2 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-2xl border border-emerald-200 shadow-2xs flex items-center gap-1.5">
-              <span>🏟️ {currentUser.facilityName || 'Sân Cầu Lông Cầu Giấy'} (Sân quản lý)</span>
+              <span>🏟️ {formatCleanFacilityName(currentUser.facilityName || 'Cầu Giấy')} (Cơ sở quản lý)</span>
             </div>
           )}
 
@@ -322,6 +396,51 @@ export const ScheduleView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Coach Pre-Session Reminder Banner */}
+      {isCoach && coachReminders.length > 0 && (
+        <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-3xl space-y-2.5 shadow-xs animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 text-amber-950 font-black text-sm">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                <Bell className="w-4 h-4 animate-bounce" />
+              </div>
+              <span>Dặn Dò Ca Dạy Từ Ban Quản Lý Sân</span>
+            </div>
+            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-950 border border-amber-300">
+              {coachReminders.filter(n => !n.read).length} lời nhắc mới
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {coachReminders.slice(0, 4).map(item => (
+              <div
+                key={item.id}
+                onClick={() => {
+                  if (item.linkTo) navigate(item.linkTo.tab, item.linkTo.id);
+                }}
+                className="p-3 bg-white rounded-2xl border border-amber-200 shadow-2xs space-y-1.5 hover:border-amber-400 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-extrabold text-[#0F172A]">
+                    {item.facilityName ? `${item.facilityName} - ${item.shiftName}` : item.title}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {item.time}
+                  </span>
+                </div>
+                <p className="text-xs text-amber-950 font-semibold p-2 bg-amber-50/90 rounded-xl border border-amber-200/70 line-clamp-2">
+                  "{item.noteContent || item.message}"
+                </p>
+                <div className="flex items-center justify-between pt-0.5 text-[10px] text-slate-400">
+                  <span>{item.senderName || 'Ban Quản Trị'}</span>
+                  <span className="text-[#10B981] font-bold">Xem chi tiết ca học →</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Admin Pending Schedule Approvals Panel */}
       {currentUser.role === 'ADMIN' && pendingStudents.length > 0 && (
@@ -448,13 +567,13 @@ export const ScheduleView: React.FC = () => {
             <select
               value={selectedFacility}
               onChange={e => setSelectedFacility(e.target.value)}
-              aria-label="Lọc theo sân cầu lông"
+              aria-label="Lọc theo cơ sở"
               className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-700 rounded-xl border border-slate-200 outline-none focus:border-[#10B981] cursor-pointer"
             >
-              <option value="ALL">Tất cả sân cầu lông</option>
+              <option value="ALL">Tất cả cơ sở</option>
               {facilities.map(f => (
                 <option key={f.id} value={f.id}>
-                  {f.name}
+                  {formatCleanFacilityName(f.name)}
                 </option>
               ))}
             </select>
@@ -535,81 +654,56 @@ export const ScheduleView: React.FC = () => {
                           Không có ca
                         </div>
                       ) : (
-                        daySessions.map(session => (
-                          <div
-                            key={session.id}
-                            onClick={() => navigate('classes', session.classId)}
-                            className="p-3 rounded-2xl border border-emerald-200/90 bg-emerald-50/90 hover:border-[#10B981] transition-all cursor-pointer shadow-2xs hover:shadow-md space-y-2 group relative"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-white/90 text-slate-800 shadow-2xs">
-                                {session.startTime}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                {session.isCoachRegistered && (
-                                  <span className="text-[9px] font-black px-1 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
-                                    HLV tự đăng ký
-                                  </span>
-                                )}
-                                <span className="text-[10px] font-extrabold text-[#0F172A] bg-white/70 px-1 rounded truncate max-w-[85px]">
-                                  {session.facilityName || session.court}
+                        daySessions.map(session => {
+                          const shiftInfo = getShiftInfo(session);
+                          const coachCount =
+                            session.coaches?.length ||
+                            (session.coachId ? session.coachId.split(',').length : 1);
+                          const studentCount =
+                            session.totalStudents || session.attendanceRecords?.length || 0;
+                          const facilityDisplay = getSessionFacilityName(session);
+
+                          return (
+                            <div
+                              key={session.id}
+                              onClick={() => navigate('classes', session.classId)}
+                              className="p-3 bg-white hover:bg-emerald-50/30 rounded-2xl border border-slate-200/90 hover:border-emerald-400 shadow-2xs hover:shadow-md transition-all cursor-pointer space-y-2.5 group"
+                            >
+                              {/* 1. Ca học */}
+                              <div>
+                                <span className="inline-block text-[11px] font-black text-emerald-800 bg-emerald-100/90 px-2.5 py-0.5 rounded-lg truncate max-w-full">
+                                  {shiftInfo.name}
                                 </span>
                               </div>
-                            </div>
 
-                            <div>
-                              <div className="text-xs font-black text-[#0F172A] group-hover:text-[#10B981] leading-tight">
-                                {session.className}
-                              </div>
-                              <div className="text-[11px] text-slate-600 mt-0.5 flex items-center justify-between">
-                                <span>HLV {session.coachName.split(' ').slice(-2).join(' ')}</span>
-                                <span className="font-bold text-slate-700">
-                                  {session.totalStudents} HV
+                              {/* 2. Cơ sở (chỉ hiển thị Cầu Giấy, Ba Đình, Thanh Xuân) */}
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">
+                                <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="truncate" title={facilityDisplay}>
+                                  {facilityDisplay}
                                 </span>
                               </div>
-                            </div>
 
-                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-1">
-                              <SessionStatusBadge status={session.status} />
-
-                              <div className="flex items-center gap-1">
-                                {currentUser.role === 'ADMIN' && (
-                                  <button
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      openAssignSessionModal(session);
-                                    }}
-                                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 transition-colors cursor-pointer border border-slate-200"
-                                    title="Admin phân sân & ca dạy"
-                                  >
-                                    Phân sân & ca
-                                  </button>
-                                )}
-                                <button
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    handleStartAttendance(session.classId, session.date, session.id);
-                                  }}
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-lg transition-colors cursor-pointer ${
-                                    session.attendanceDone
-                                      ? canManageCoachAttendance && !session.coachAttendanceDone
-                                        ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs'
-                                        : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                      : 'bg-slate-900 text-white hover:bg-slate-800'
-                                  }`}
+                              {/* 3. Số lượng HLV & Số lượng Học viên */}
+                              <div className="grid grid-cols-2 gap-1.5 py-1.5 px-2 bg-slate-50 group-hover:bg-slate-100/80 rounded-xl border border-slate-100 text-xs transition-colors">
+                                <div
+                                  className="flex items-center gap-1.5 font-bold text-slate-700 truncate"
+                                  title={`${coachCount} Huấn luyện viên phụ trách`}
                                 >
-                                  {canManageCoachAttendance && session.attendanceDone && !session.coachAttendanceDone
-                                    ? 'Chấm HLV'
-                                    : session.attendanceDone
-                                    ? session.attendedByRole === 'COACH'
-                                      ? '✓ GV đã điểm danh'
-                                      : '✓ Đã điểm danh'
-                                    : 'Điểm danh'}
-                                </button>
+                                  <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                  <span>{coachCount} HLV</span>
+                                </div>
+                                <div
+                                  className="flex items-center gap-1.5 font-bold text-slate-700 justify-end truncate"
+                                  title={`${studentCount} Học viên`}
+                                >
+                                  <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                  <span>{studentCount} HV</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   );
@@ -628,84 +722,50 @@ export const ScheduleView: React.FC = () => {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="py-3.5 px-5">Ngày</th>
-                  <th className="py-3.5 px-4">Thời gian</th>
-                  <th className="py-3.5 px-4">Sân cầu lông</th>
-                  <th className="py-3.5 px-4">Lớp học</th>
-                  <th className="py-3.5 px-4">HLV phụ trách</th>
-                  <th className="py-3.5 px-4">Học viên</th>
-                  <th className="py-3.5 px-4">Điểm danh</th>
+                  <th className="py-3.5 px-4">Cơ sở</th>
+                  <th className="py-3.5 px-4">Ca học</th>
+                  <th className="py-3.5 px-4">Số lượng HLV</th>
+                  <th className="py-3.5 px-4">Số lượng HV</th>
                   <th className="py-3.5 px-5 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredSessions.map(s => (
-                  <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3.5 px-5 font-bold text-[#0F172A] text-xs">
-                      {s.dayOfWeek}, {s.date}
-                    </td>
-                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-700">{s.timeSlot}</td>
-                    <td className="py-3.5 px-4 text-xs">
-                      <strong className="text-[#0F172A]">{s.facilityName || s.court}</strong>
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-[#0F172A]">
-                      <div className="flex items-center gap-1.5">
-                        <span>{s.className}</span>
-                        {s.isCoachRegistered && (
-                          <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200 shrink-0">
-                            HLV tự đăng ký
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-xs text-slate-700">{s.coachName}</td>
-                    <td className="py-3.5 px-4 text-xs font-bold text-[#0F172A]">
-                      {s.totalStudents} HV
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {s.attendanceDone ? (
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 inline-block">
-                            {s.attendedByRole === 'COACH' ? 'GV đã điểm danh' : 'Đã điểm danh'}
-                          </span>
-                          {s.coachAttendanceDone && (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border block w-fit ${
-                              s.coachAttendance?.status === 'Late'
-                                ? 'text-amber-700 bg-amber-50 border-amber-200'
-                                : s.coachAttendance?.status === 'Absent'
-                                ? 'text-rose-700 bg-rose-50 border-rose-200'
-                                : 'text-indigo-700 bg-indigo-50 border-indigo-200'
-                            }`}>
-                              {s.coachAttendance?.status === 'Late'
-                                ? 'HLV đi muộn'
-                                : s.coachAttendance?.status === 'Absent'
-                                ? 'HLV vắng mặt'
-                                : 'Đã chấm HLV: Có mặt'}
-                            </span>
-                          )}
+                {filteredSessions.map(s => {
+                  const shiftInfo = getShiftInfo(s);
+                  const coachCount =
+                    s.coaches?.length || (s.coachId ? s.coachId.split(',').length : 1);
+                  const studentCount = s.totalStudents || s.attendanceRecords?.length || 0;
+                  const facilityDisplay = getSessionFacilityName(s);
+
+                  return (
+                    <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-5 font-bold text-[#0F172A] text-xs">
+                        {s.dayOfWeek}, {s.date}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs font-bold text-[#0F172A]">
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{facilityDisplay}</span>
                         </div>
-                      ) : (
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 inline-block">
-                            Chưa điểm danh
-                          </span>
-                          {s.coachAttendanceDone && (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border block w-fit ${
-                              s.coachAttendance?.status === 'Late'
-                                ? 'text-amber-700 bg-amber-50 border-amber-200'
-                                : s.coachAttendance?.status === 'Absent'
-                                ? 'text-rose-700 bg-rose-50 border-rose-200'
-                                : 'text-indigo-700 bg-indigo-50 border-indigo-200'
-                            }`}>
-                              {s.coachAttendance?.status === 'Late'
-                                ? 'HLV đi muộn'
-                                : s.coachAttendance?.status === 'Absent'
-                                ? 'HLV vắng mặt'
-                                : 'Đã chấm HLV: Có mặt'}
-                            </span>
-                          )}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs font-bold">
+                        <span className="inline-block text-[11px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                          {shiftInfo.name}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-xs font-bold text-slate-700">
+                        <div className="flex items-center gap-1">
+                          <Award className="w-3.5 h-3.5 text-amber-500" />
+                          <span>{coachCount} HLV</span>
                         </div>
-                      )}
-                    </td>
+                      </td>
+                      <td className="py-3.5 px-4 text-xs font-bold text-[#0F172A]">
+                        <div className="flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5 text-blue-500" />
+                          <span>{studentCount} HV</span>
+                        </div>
+                      </td>
+
                     <td className="py-3.5 px-5 text-right space-x-2">
                       {currentUser.role === 'ADMIN' && (
                         <button
@@ -748,8 +808,9 @@ export const ScheduleView: React.FC = () => {
                       )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
+                );
+              })}
+            </tbody>
             </table>
           </div>
         </div>
@@ -763,7 +824,7 @@ export const ScheduleView: React.FC = () => {
       >
         <form onSubmit={handleCreateSchedule} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Sân cầu lông *</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Cơ sở *</label>
             <select
               value={modalFacilityId}
               onChange={e => setModalFacilityId(e.target.value)}
@@ -771,7 +832,7 @@ export const ScheduleView: React.FC = () => {
             >
               {facilities.map(f => (
                 <option key={f.id} value={f.id}>
-                  {f.name}
+                  {formatCleanFacilityName(f.name)}
                 </option>
               ))}
             </select>
@@ -985,7 +1046,7 @@ export const ScheduleView: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Cơ sở / Sân cầu lông *
+                Cơ sở *
               </label>
               <select
                 value={assignSessionFacilityId}
@@ -994,7 +1055,7 @@ export const ScheduleView: React.FC = () => {
               >
                 {facilities.map(f => (
                   <option key={f.id} value={f.id}>
-                    {f.name} ({f.address || 'Cơ sở'})
+                    {formatCleanFacilityName(f.name)} ({f.address || 'Cơ sở'})
                   </option>
                 ))}
               </select>

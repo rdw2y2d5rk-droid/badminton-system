@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import {
   INITIAL_ADMIN_NOTIFICATIONS,
   INITIAL_ALL_SESSIONS,
+  INITIAL_CHAT_MESSAGES,
   INITIAL_CLASSES,
   INITIAL_COACHES,
   INITIAL_COURTS,
@@ -17,12 +18,15 @@ import {
   AdminNotification,
   AttendanceRecordItem,
   BadmintonClass,
+  ChatMessage,
+  ChatReaction,
   Coach,
   CoachAttendanceRecord,
   CourtInfo,
   Facility,
   NotificationItem,
   PaymentItem,
+  ScheduledSession,
   SessionSchedule,
   ShiftInfo,
   Student,
@@ -165,7 +169,14 @@ interface AppContextType {
     startDate?: string,
     endDate?: string,
     specificDates?: string[],
-    tuitionFee?: number
+    tuitionFee?: number,
+    scheduledSessions?: ScheduledSession[]
+  ) => void;
+  updateStudentSession: (
+    studentId: string,
+    sessionIndex: number,
+    updatedSession: ScheduledSession,
+    reason?: string
   ) => void;
   
   // Class actions
@@ -190,6 +201,12 @@ interface AppContextType {
   // Search
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+
+  // Kênh Chat Chung (Admin, Quản lý cơ sở, HLV)
+  chatMessages: ChatMessage[];
+  sendChatMessage: (content: string, isNotice?: boolean) => void;
+  toggleChatReaction: (messageId: string, emoji: string, label: string) => void;
+  deleteChatMessage: (messageId: string) => void;
   
   // Toast notifications
   toasts: ToastItem[];
@@ -205,9 +222,14 @@ interface AppContextType {
   assignedSessions: SessionSchedule[];
   assignedCourts: CourtInfo[];
   
-  // Daily auto-generated classes & coach assignment
+  // Daily auto-generated classes & coach assignment & pre-session notes
   dailyCoachAssignments: Record<string, string[]>;
-  addCoachToDailyClass: (classId: string, coachIdOrIds: string | string[]) => void;
+  dailyClassNotes: Record<string, string>;
+  classCoachStudentAssignments: Record<string, Record<string, string[]>>;
+  assignStudentToCoachInClass: (classId: string, studentId: string, targetCoachId: string | null) => void;
+  batchAssignStudentsToCoachInClass: (classId: string, targetCoachId: string, studentIdsToAssign: string[]) => void;
+  addCoachToDailyClass: (classId: string, coachIdOrIds: string | string[], note?: string) => void;
+  updateDailyClassNote: (classId: string, note: string) => void;
   removeCoachFromDailyClass: (classId: string, coachId: string) => void;
   assignCoachToDailyClass: (classId: string, coachId: string) => void;
   getDailyClasses: (dateStr: string, filterFacilityId?: string) => BadmintonClass[];
@@ -224,6 +246,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_USERS[0]);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
   
   const [facilities, setFacilities] = useState<Facility[]>(INITIAL_FACILITIES);
   const [courts, setCourts] = useState<CourtInfo[]>(INITIAL_FACILITIES);
@@ -251,20 +274,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : ['2026-08-04', '2026-08-08', '2026-08-11', '2026-08-15', '2026-08-18', '2026-08-22', '2026-08-28'])
         : ['2026-08-03', '2026-08-05', '2026-08-07', '2026-08-10', '2026-08-12', '2026-08-14', '2026-08-17', '2026-08-19', '2026-08-21', '2026-08-24', '2026-08-26', '2026-08-28'];
 
-      const targetFac = facMap[idx % facMap.length];
-      const targetShift = shiftMap[idx % shiftMap.length];
+      // Allocate first 16 students to Ba Đình (CS02) Ca Sáng 1 (CA01) for rich data
+      const isBaDinhCaSang1 = idx < 16;
+      const targetFac = isBaDinhCaSang1 ? facMap[1] : facMap[idx % facMap.length];
+      const targetShift = isBaDinhCaSang1 ? shiftMap[0] : shiftMap[idx % shiftMap.length];
+
+      // Demo multi-facility student for HV003 (idx === 2)
+      const isMultiFacilityDemo = idx === 2;
+      const scheduledSessions: ScheduledSession[] = sampleDates.map((d, dIdx) => {
+        if (isMultiFacilityDemo) {
+          const f = dIdx % 2 === 0 ? facMap[0] : facMap[1]; // Cầu Giấy (T2) vs Ba Đình (T4)
+          const sh = dIdx % 2 === 0 ? shiftMap[3] : shiftMap[2]; // Ca Tối 1 vs Ca Chiều
+          return {
+            date: d,
+            facilityId: f.id,
+            facilityName: f.name,
+            shiftId: sh.id,
+            shiftName: sh.name,
+            timeSlot: sh.timeSlot
+          };
+        }
+        return {
+          date: d,
+          facilityId: targetFac.id,
+          facilityName: targetFac.name,
+          shiftId: targetShift.id,
+          shiftName: targetShift.name,
+          timeSlot: targetShift.timeSlot
+        };
+      });
+
+      const facilityName = isMultiFacilityDemo ? 'Đa cơ sở (2 cơ sở)' : targetFac.name;
 
       return {
         ...s,
-        facilityId: s.facilityId || targetFac.id,
-        facilityName: s.facilityName || targetFac.name,
-        courtName: s.courtName || targetFac.name,
-        fixedShiftId: s.fixedShiftId || targetShift.id,
-        fixedShiftName: s.fixedShiftName || targetShift.name,
-        shiftId: s.shiftId || targetShift.id,
-        shiftName: s.shiftName || targetShift.name,
-        timeSlot: s.timeSlot || targetShift.timeSlot,
-        specificDates: s.specificDates || sampleDates,
+        facilityId: isMultiFacilityDemo ? 'CS01' : targetFac.id,
+        facilityName,
+        courtName: facilityName,
+        fixedShiftId: targetShift.id,
+        fixedShiftName: targetShift.name,
+        shiftId: targetShift.id,
+        shiftName: targetShift.name,
+        timeSlot: targetShift.timeSlot,
+        scheduledSessions,
+        specificDates: sampleDates,
         scheduleStatus: 'confirmed',
         scheduleConfirmedAt: new Date().toISOString(),
         scheduleConfirmedBy: 'Admin Hệ Thống',
@@ -275,7 +328,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [coaches, setCoaches] = useState<Coach[]>(INITIAL_COACHES);
   const [sessions, setSessions] = useState<SessionSchedule[]>(INITIAL_ALL_SESSIONS);
   const [payments, setPayments] = useState<PaymentItem[]>(INITIAL_PAYMENTS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('badminton_notifications_v1');
+      if (saved) return JSON.parse(saved);
+      return INITIAL_NOTIFICATIONS;
+    } catch {
+      return INITIAL_NOTIFICATIONS;
+    }
+  });
   const [adminNotifications, setAdminNotifications] = useState<AdminNotification[]>(INITIAL_ADMIN_NOTIFICATIONS);
 
   // Unit price per training session (Admin configured)
@@ -323,6 +384,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? `Quản lý ${target.facilityName || 'Cơ sở'}`
           : 'Huấn luyện viên';
       showToast(`Đã chuyển sang vai trò: ${target.name} (${roleLabel})`, 'info');
+
+      if (target.role === 'COACH') {
+        const coachNotifs = notifications.filter(
+          n => !n.read && n.targetRole === 'COACH' && (!n.targetCoachId || n.targetCoachId === target.coachId)
+        );
+        if (coachNotifs.length > 0) {
+          setTimeout(() => {
+            showToast(`🔔 HLV ${target.name}: Bạn có ${coachNotifs.length} lời nhắc nhở mới từ Ban Quản Lý cho ca dạy hôm nay!`, 'warning');
+          }, 400);
+        }
+      }
     }
   };
 
@@ -393,19 +465,239 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [dailyCoachAssignments, setDailyCoachAssignments] = useState<Record<string, string[]>>(() => {
     try {
       const saved = localStorage.getItem('badminton_daily_coach_assignments_v3');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (!parsed['CLS_CS02_CA01_2026-08-28'] || parsed['CLS_CS02_CA01_2026-08-28'].length === 0) {
+          parsed['CLS_CS02_CA01_2026-08-28'] = ['HLV001', 'HLV002', 'HLV003', 'HLV004', 'HLV005'];
+          localStorage.setItem('badminton_daily_coach_assignments_v3', JSON.stringify(parsed));
+        }
+        return parsed;
+      }
       return {
+        'CLS_CS02_CA01_2026-08-28': ['HLV001', 'HLV002', 'HLV003', 'HLV004', 'HLV005'],
         'CLS_CS01_CA04_2026-08-28': ['HLV001'],
         'CLS_CS01_CA02_2026-08-28': ['HLV002'],
         'CLS_CS02_CA04_2026-08-28': ['HLV004', 'HLV003'],
         'CLS_CS03_CA03_2026-08-28': ['HLV005']
       };
     } catch {
+      return {
+        'CLS_CS02_CA01_2026-08-28': ['HLV001', 'HLV002', 'HLV003', 'HLV004', 'HLV005']
+      };
+    }
+  });
+
+  // Daily class pre-session reminder notes: { [classId]: string }
+  const [dailyClassNotes, setDailyClassNotes] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('badminton_daily_class_notes_v1');
+      if (saved) return JSON.parse(saved);
+      return {
+        'CLS_CS02_CA01_2026-08-28': 'Lớp đông 16 học viên chia 5 HLV kèm cặp. Khởi động kỹ và tập các bài ép sân cơ bản.',
+        'CLS_CS01_CA04_2026-08-28': 'Khởi động kỹ cổ chân và rèn kỹ thuật đập cầu góc chéo sân.',
+        'CLS_CS01_CA02_2026-08-28': 'Lớp có 2 học viên mới, HLV hướng dẫn tư thế cầm vợt chuẩn BWF.'
+      };
+    } catch {
       return {};
     }
   });
 
-  const addCoachToDailyClass = useCallback((classId: string, coachIdOrIds: string | string[]) => {
+  // Class coach-student assignments: { [classId]: { [coachId]: string[] } }
+  const [classCoachStudentAssignments, setClassCoachStudentAssignments] = useState<Record<string, Record<string, string[]>>>(() => {
+    const defaultRichAssignments: Record<string, Record<string, string[]>> = {
+      'CLS_CS02_CA01_2026-08-28': {
+        'HLV001': ['HV001', 'HV002', 'HV003'],
+        'HLV002': ['HV004', 'HV005'],
+        'HLV003': ['HV006', 'HV007', 'HV008'],
+        'HLV004': ['HV009', 'HV010'],
+        'HLV005': ['HV011']
+      }
+    };
+
+    try {
+      const saved = localStorage.getItem('badminton_class_coach_student_assignments_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const existingClass = parsed['CLS_CS02_CA01_2026-08-28'];
+        const count = existingClass ? Object.values(existingClass).flat().length : 0;
+        if (count <= 1) {
+          parsed['CLS_CS02_CA01_2026-08-28'] = defaultRichAssignments['CLS_CS02_CA01_2026-08-28'];
+          localStorage.setItem('badminton_class_coach_student_assignments_v1', JSON.stringify(parsed));
+        }
+        return parsed;
+      }
+      return defaultRichAssignments;
+    } catch {
+      return defaultRichAssignments;
+    }
+  });
+
+  const assignStudentToCoachInClass = useCallback((classId: string, studentId: string, targetCoachId: string | null) => {
+    setClassCoachStudentAssignments(prev => {
+      const currentClassMap = { ...(prev[classId] || {}) };
+      // Remove student from all coaches in this class
+      Object.keys(currentClassMap).forEach(cid => {
+        currentClassMap[cid] = (currentClassMap[cid] || []).filter(sid => sid !== studentId);
+      });
+
+      // If targetCoachId is given, add to that coach
+      if (targetCoachId) {
+        currentClassMap[targetCoachId] = [...(currentClassMap[targetCoachId] || []), studentId];
+      }
+
+      const next = { ...prev, [classId]: currentClassMap };
+      try {
+        localStorage.setItem('badminton_class_coach_student_assignments_v1', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+
+    const targetStudent = students.find(s => s.id === studentId);
+    const targetCoach = targetCoachId ? coaches.find(c => c.id === targetCoachId) : null;
+    if (targetCoach && targetStudent) {
+      showToast(`Đã phân công học viên ${targetStudent.name} cho HLV ${targetCoach.name}`, 'success');
+    } else if (targetStudent) {
+      showToast(`Đã chuyển học viên ${targetStudent.name} về danh sách Chưa phân công`, 'info');
+    }
+  }, [students, coaches, showToast]);
+
+  const batchAssignStudentsToCoachInClass = useCallback((classId: string, targetCoachId: string, studentIdsToAssign: string[]) => {
+    const newStudentIdSet = new Set(studentIdsToAssign);
+
+    setClassCoachStudentAssignments(prev => {
+      const currentClassMap = { ...(prev[classId] || {}) };
+      
+      // 1. Remove all students in newStudentIdSet from ANY other coach in this class
+      Object.keys(currentClassMap).forEach(cid => {
+        if (cid !== targetCoachId) {
+          currentClassMap[cid] = (currentClassMap[cid] || []).filter(sid => !newStudentIdSet.has(sid));
+        }
+      });
+
+      // 2. Set the students for targetCoachId to studentIdsToAssign
+      currentClassMap[targetCoachId] = [...studentIdsToAssign];
+
+      const next = { ...prev, [classId]: currentClassMap };
+      try {
+        localStorage.setItem('badminton_class_coach_student_assignments_v1', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+
+    const targetCoach = coaches.find(c => c.id === targetCoachId);
+    if (targetCoach) {
+      showToast(`Đã cập nhật phân công ${studentIdsToAssign.length} học viên cho HLV ${targetCoach.name}`, 'success');
+    }
+  }, [coaches, showToast]);
+
+  // Helper to send targeted notifications to coaches when management writes a note
+  const dispatchCoachReminderNotification = useCallback((classId: string, noteText: string) => {
+    if (!noteText.trim()) return;
+
+    let facilityName = 'Cơ sở đào tạo';
+    let shiftName = 'Ca học';
+    let timeSlot = '';
+    let targetCoachIds: string[] = [];
+
+    if (classId.startsWith('CLS_')) {
+      const parts = classId.split('_');
+      const facId = parts[1];
+      const shiftId = parts[2];
+      const facObj = facilities.find(f => f.id === facId);
+      if (facObj) facilityName = facObj.name;
+      const shiftObj = shifts.find(s => s.id === shiftId);
+      if (shiftObj) {
+        shiftName = shiftObj.name;
+        timeSlot = `${shiftObj.startTime} - ${shiftObj.endTime}`;
+      }
+      const assignedIds = dailyCoachAssignments[classId] || [];
+      targetCoachIds = [...assignedIds];
+    } else {
+      const staticClass = classes.find(c => c.id === classId);
+      if (staticClass) {
+        facilityName = staticClass.facilityName || 'Cơ sở đào tạo';
+        shiftName = staticClass.shiftName || staticClass.scheduleDaysText || 'Ca học';
+        timeSlot = staticClass.timeSlot || '';
+        if (staticClass.coaches && staticClass.coaches.length > 0) {
+          targetCoachIds = staticClass.coaches.map(c => c.id);
+        } else if (staticClass.coachId) {
+          targetCoachIds = [staticClass.coachId];
+        }
+      }
+    }
+
+    const senderTitle = currentUser.role === 'ADMIN' ? 'Ban Quản Trị (Admin)' : `Quản Lý Sân (${currentUser.name})`;
+
+    // If there are specific assigned coaches, send a notification to each coach; otherwise send to all coaches
+    const coachItemsToNotify = targetCoachIds.length > 0 
+      ? targetCoachIds.map(cid => {
+          const cObj = coaches.find(c => c.id === cid);
+          return { id: cid, name: cObj?.name || 'HLV' };
+        })
+      : [{ id: undefined, name: 'HLV Phụ Trách' }];
+
+    setNotifications(prev => {
+      const newItems: NotificationItem[] = coachItemsToNotify.map((coach, idx) => ({
+        id: `NOTIF-COACH-${Date.now()}-${coach.id || 'all'}-${idx}`,
+        title: `🔔 Dặn dò ca dạy từ ${senderTitle}`,
+        message: `${facilityName} • ${shiftName}${timeSlot ? ` (${timeSlot})` : ''}: "${noteText.trim()}"`,
+        time: 'Vừa xong',
+        read: false,
+        type: 'warning',
+        targetRole: 'COACH',
+        targetCoachId: coach.id,
+        targetCoachName: coach.name,
+        facilityName,
+        shiftName,
+        timeSlot,
+        noteContent: noteText.trim(),
+        senderName: senderTitle,
+        linkTo: { tab: 'attendance', id: classId }
+      }));
+
+      const next = [...newItems, ...prev];
+      try {
+        localStorage.setItem('badminton_notifications_v1', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  }, [currentUser, facilities, shifts, dailyCoachAssignments, classes, coaches]);
+
+  const updateDailyClassNote = useCallback((classId: string, note: string) => {
+    if (currentUser.role === 'COACH') {
+      showToast('Chỉ Admin hoặc Quản lý sân mới có quyền cập nhật ghi chú nhắc nhở ca học!', 'error');
+      return;
+    }
+    const facId = classId.split('_')[1];
+    if (currentUser.role === 'FACILITY_MANAGER' && currentUser.facilityId && facId && facId !== currentUser.facilityId) {
+      showToast('Quản lý sân chỉ có quyền ghi chú cho sân của mình!', 'error');
+      return;
+    }
+
+    setDailyClassNotes(prev => {
+      const next = { ...prev, [classId]: note.trim() };
+      try {
+        localStorage.setItem('badminton_daily_class_notes_v1', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+
+    if (note.trim()) {
+      dispatchCoachReminderNotification(classId, note);
+    }
+
+    showToast('Đã lưu và gửi thông báo dặn dò đến Huấn luyện viên thành công!', 'success');
+  }, [currentUser, dispatchCoachReminderNotification]);
+
+  const addCoachToDailyClass = useCallback((classId: string, coachIdOrIds: string | string[], note?: string) => {
     if (currentUser.role === 'COACH') {
       showToast('Chỉ Admin hoặc Quản lý sân mới có quyền thêm HLV vào lớp!', 'error');
       return;
@@ -416,8 +708,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    // Save pre-session reminder note if provided (only for coach)
+    if (typeof note === 'string') {
+      setDailyClassNotes(prev => {
+        const next = { ...prev, [classId]: note.trim() };
+        try {
+          localStorage.setItem('badminton_daily_class_notes_v1', JSON.stringify(next));
+        } catch (e) {
+          console.error(e);
+        }
+        return next;
+      });
+
+      if (note.trim()) {
+        dispatchCoachReminderNotification(classId, note);
+      }
+    }
+
     const idsToAdd = Array.isArray(coachIdOrIds) ? coachIdOrIds : [coachIdOrIds];
-    if (!idsToAdd.length) return;
+    if (!idsToAdd.length) {
+      if (typeof note === 'string' && note.trim()) {
+        showToast('Đã lưu và gửi thông báo dặn dò đến Huấn luyện viên thành công!', 'success');
+      }
+      return;
+    }
 
     setDailyCoachAssignments(prev => {
       const currentList = prev[classId] || [];
@@ -556,6 +870,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           facilityId: facility.id,
           facilityName: facility.name,
           shiftId: shift.id,
+          shiftName: shift.name,
           coachId: primaryCoach?.id || '',
           coachName: assignedCoaches.length > 0
             ? assignedCoaches.map(c => c.name).join(', ')
@@ -564,7 +879,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           coaches: assignedCoaches,
           coachIds: assignedCoachIds,
           scheduleDays: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
-          scheduleDaysText: `${shift.name} (${shift.startTime} - ${shift.endTime})`,
+          scheduleDaysText: shift.name,
           timeSlot: `${shift.startTime} - ${shift.endTime}`,
           court: facility.name,
           maxStudents: (facility.totalCourts || 2) * 6,
@@ -574,7 +889,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           feePerPackage: sessionUnitPrice * 12,
           totalSessions: 12,
           description: `Lớp cầu lông ca ${shift.name} tại ${facility.name} ngày ${dateStr}. Tự động tạo khi có học viên đăng ký đúng ngày, ca, sân.`,
-          startDate: dateStr
+          startDate: dateStr,
+          preSessionNote: dailyClassNotes[classId] || '',
+          note: dailyClassNotes[classId] || ''
         };
 
         // If user is coach, only include classes that have this coach assigned
@@ -592,13 +909,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     return generatedClasses;
-  }, [facilities, shifts, students, coaches, dailyCoachAssignments, sessionUnitPrice, isFacilityManager, managedFacilityId, isCoach, currentUser]);
+  }, [facilities, shifts, students, coaches, dailyCoachAssignments, dailyClassNotes, sessionUnitPrice, isFacilityManager, managedFacilityId, isCoach, currentUser]);
 
   const getClassById = useCallback((classId: string, dateStr?: string): BadmintonClass | undefined => {
     // 1. Check static classes first if not dynamic CLS_
     if (!classId.startsWith('CLS_')) {
       const staticClass = classes.find(c => c.id === classId);
-      if (staticClass) return staticClass;
+      if (staticClass) {
+        return {
+          ...staticClass,
+          preSessionNote: dailyClassNotes[classId] || staticClass.preSessionNote || '',
+          note: dailyClassNotes[classId] || staticClass.note || ''
+        };
+      }
     }
 
     // 2. If it's a dynamic class ID: CLS_{facilityId}_{shiftId}_{dateStr}
@@ -644,6 +967,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           facilityId: facility.id,
           facilityName: facility.name,
           shiftId: shift.id,
+          shiftName: shift.name,
           coachId: primaryCoach?.id || '',
           coachName: assignedCoaches.length > 0
             ? assignedCoaches.map(c => c.name).join(', ')
@@ -652,7 +976,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           coaches: assignedCoaches,
           coachIds: assignedCoachIds,
           scheduleDays: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
-          scheduleDaysText: `${shift.name} (${shift.startTime} - ${shift.endTime})`,
+          scheduleDaysText: shift.name,
           timeSlot: `${shift.startTime} - ${shift.endTime}`,
           court: facility.name,
           maxStudents: (facility.totalCourts || 2) * 6,
@@ -662,13 +986,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           feePerPackage: sessionUnitPrice * 12,
           totalSessions: 12,
           description: `Lớp cầu lông ca ${shift.name} tại ${facility.name} ngày ${date}. Tự động tạo theo Số sân × Số ca và tự động thêm học viên đã đăng ký.`,
-          startDate: date
+          startDate: date,
+          preSessionNote: dailyClassNotes[classId] || '',
+          note: dailyClassNotes[classId] || ''
         };
       }
     }
 
-    return classes.find(c => c.id === classId) || classes[0];
-  }, [classes, facilities, shifts, students, coaches, dailyCoachAssignments, sessionUnitPrice]);
+    const fallback = classes.find(c => c.id === classId) || classes[0];
+    return fallback ? {
+      ...fallback,
+      preSessionNote: dailyClassNotes[classId] || fallback.preSessionNote || '',
+      note: dailyClassNotes[classId] || fallback.note || ''
+    } : fallback;
+  }, [classes, facilities, shifts, students, coaches, dailyCoachAssignments, dailyClassNotes, sessionUnitPrice]);
 
   // Facility CRUD (Admin Only)
   const addFacility = (facilityData: Omit<Facility, 'id' | 'code'>) => {
@@ -1739,19 +2070,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addStudent = (studentData: Omit<Student, 'id' | 'code'>) => {
     const nextNum = students.length + 1;
     const newId = `HV${String(nextNum).padStart(3, '0')}`;
-    const specificDates = studentData.specificDates || [];
+    const scheduledSessions = studentData.scheduledSessions || [];
+    const specificDates = scheduledSessions.length > 0
+      ? scheduledSessions.map(s => s.date)
+      : (studentData.specificDates || []);
     const packageSessions = specificDates.length > 0 ? specificDates.length : (studentData.packageSessions || 12);
     const calculatedTuition = studentData.tuitionFee || (packageSessions * sessionUnitPrice);
     const allowedLeaves = Math.floor(packageSessions / 4);
     const scheduleStatus = 'confirmed';
+
+    let resolvedFacilityName = studentData.facilityName || 'Sân Cầu Lông Cầu Giấy';
+    let resolvedCourtName = studentData.courtName || resolvedFacilityName;
+    if (scheduledSessions.length > 0) {
+      const uniqueFacs = Array.from(new Set(scheduledSessions.map(s => s.facilityName).filter(Boolean)));
+      if (uniqueFacs.length > 1) {
+        resolvedFacilityName = `Đa cơ sở (${uniqueFacs.length} cơ sở)`;
+        resolvedCourtName = resolvedFacilityName;
+      } else if (uniqueFacs.length === 1) {
+        resolvedFacilityName = uniqueFacs[0];
+        resolvedCourtName = uniqueFacs[0];
+      }
+    }
 
     const newStudent: Student = {
       ...studentData,
       paymentStatus: studentData.paymentStatus || 'Unpaid',
       id: newId,
       code: newId,
-      facilityName: studentData.facilityName || 'Sân Cầu Lông Cầu Giấy',
-      courtName: studentData.facilityName || 'Sân Cầu Lông Cầu Giấy',
+      facilityName: resolvedFacilityName,
+      courtName: resolvedCourtName,
+      scheduledSessions,
       specificDates,
       packageSessions,
       tuitionFee: calculatedTuition,
@@ -1902,7 +2250,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     startDate?: string,
     endDate?: string,
     specificDates?: string[],
-    tuitionFee?: number
+    tuitionFee?: number,
+    scheduledSessions?: ScheduledSession[]
   ) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
@@ -1915,6 +2264,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? tuitionFee
       : (classes.find(c => c.id === student.classId)?.feePerPackage || (newPackageSessions * sessionUnitPrice));
 
+    let updatedFacilityName = student.facilityName;
+    if (scheduledSessions && scheduledSessions.length > 0) {
+      const uniqueFacs = Array.from(new Set(scheduledSessions.map(s => s.facilityName).filter(Boolean)));
+      if (uniqueFacs.length > 1) {
+        updatedFacilityName = `Đa cơ sở (${uniqueFacs.length} cơ sở)`;
+      } else if (uniqueFacs.length === 1) {
+        updatedFacilityName = uniqueFacs[0];
+      }
+    }
+
+    const updatedSpecificDates = scheduledSessions && scheduledSessions.length > 0
+      ? scheduledSessions.map(s => s.date)
+      : (specificDates || student.specificDates);
+
     setStudents(prev =>
       prev.map(s => {
         if (s.id === studentId) {
@@ -1923,9 +2286,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             month: monthStr,
             startDate: startDate || s.startDate,
             endDate: endDate || s.endDate,
+            facilityName: updatedFacilityName,
+            courtName: updatedFacilityName,
+            scheduledSessions: scheduledSessions || s.scheduledSessions,
             packageSessions: newPackageSessions,
             tuitionFee: calculatedFee,
-            specificDates: specificDates || s.specificDates,
+            specificDates: updatedSpecificDates,
             scheduleStatus: 'confirmed',
             scheduleConfirmedAt: new Date().toISOString(),
             scheduleConfirmedBy: currentUser.name,
@@ -1962,6 +2328,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     showToast(
       `Đã gia hạn ${monthStr} cho ${student.name}: +${newPackageSessions} buổi, cộng dồn ${carriedOver} buổi từ tháng trước!`,
+      'success'
+    );
+  };
+
+  const updateStudentSession = (
+    studentId: string,
+    sessionIndex: number,
+    updatedSession: ScheduledSession,
+    reason?: string
+  ) => {
+    setStudents(prev =>
+      prev.map(student => {
+        if (student.id !== studentId) return student;
+
+        const currentSessions = student.scheduledSessions ? [...student.scheduledSessions] : [];
+        if (sessionIndex >= 0 && sessionIndex < currentSessions.length) {
+          currentSessions[sessionIndex] = { ...updatedSession };
+        } else {
+          const idx = currentSessions.findIndex(s => s.date === updatedSession.date);
+          if (idx >= 0) {
+            currentSessions[idx] = { ...updatedSession };
+          } else {
+            currentSessions.push(updatedSession);
+          }
+        }
+
+        currentSessions.sort((a, b) => a.date.localeCompare(b.date));
+
+        const uniqueFacs = Array.from(new Set(currentSessions.map(s => s.facilityName).filter(Boolean)));
+        let updatedFacilityName = student.facilityName;
+        if (uniqueFacs.length > 1) {
+          updatedFacilityName = `Đa cơ sở (${uniqueFacs.length} cơ sở)`;
+        } else if (uniqueFacs.length === 1) {
+          updatedFacilityName = uniqueFacs[0];
+        }
+
+        const updatedDates = currentSessions.map(s => s.date);
+
+        return {
+          ...student,
+          scheduledSessions: currentSessions,
+          specificDates: updatedDates,
+          facilityName: updatedFacilityName,
+          courtName: updatedFacilityName
+        };
+      })
+    );
+
+    const [y, m, d] = updatedSession.date.split('-');
+    const reasonMsg = reason ? ` (${reason})` : '';
+    showToast(
+      `Đã đổi lịch học ngày ${d}/${m}: ${updatedSession.facilityName.replace('Sân Cầu Lông ', '')} - ${updatedSession.shiftName}${reasonMsg}`,
       'success'
     );
   };
@@ -2037,14 +2455,138 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const markNotificationAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
-    );
+    setNotifications(prev => {
+      const next = prev.map(n => (n.id === id ? { ...n, read: true } : n));
+      try {
+        localStorage.setItem('badminton_notifications_v1', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
   };
 
   const markAllNotificationsAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setNotifications(prev => {
+      const next = prev.map(n => ({ ...n, read: true }));
+      try {
+        localStorage.setItem('badminton_notifications_v1', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
     showToast('Đã đánh dấu đọc tất cả thông báo', 'info');
+  };
+
+  // Kênh Chat Chung Actions
+  const sendChatMessage = (content: string, isNotice: boolean = false) => {
+    if (!content.trim()) return;
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} - Hôm nay`;
+
+    // Phát hiện tag tên người dùng hoặc tag tất cả
+    const isAllMentioned =
+      content.includes('@Tất cả') ||
+      content.toLowerCase().includes('@tất cả') ||
+      content.toLowerCase().includes('@mọi người');
+
+    const mentionedUsers = INITIAL_USERS.filter(u => {
+      if (u.id === currentUser.id) return false;
+      const cleanName = u.name.trim();
+      return (
+        content.includes(`@${cleanName}`) ||
+        content.toLowerCase().includes(`@${cleanName.toLowerCase()}`)
+      );
+    });
+
+    const targetUsersToNotify = isAllMentioned
+      ? INITIAL_USERS.filter(u => u.id !== currentUser.id)
+      : mentionedUsers;
+
+    const newMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderRole: currentUser.role,
+      senderAvatar: currentUser.avatar,
+      facilityName: currentUser.facilityName,
+      content: content.trim(),
+      timestamp: timeStr,
+      createdAt: Date.now(),
+      isNotice,
+      reactions: [],
+      mentions: targetUsersToNotify.map(u => u.id)
+    };
+
+    setChatMessages(prev => [...prev, newMsg]);
+
+    // Tạo thông báo đến người được nhắc tên
+    if (targetUsersToNotify.length > 0) {
+      const newNotifs: NotificationItem[] = targetUsersToNotify.map(targetUser => ({
+        id: `NOTIF-CHAT-MENTION-${Date.now()}-${targetUser.id}`,
+        title: `💬 ${currentUser.name} đã nhắc tên bạn trong Chat`,
+        message: content.trim(),
+        time: 'Vừa xong',
+        read: false,
+        type: 'info',
+        targetUserId: targetUser.id,
+        senderName: currentUser.name,
+        linkTo: { tab: 'chat' }
+      }));
+      setNotifications(prev => [...newNotifs, ...prev]);
+      showToast(
+        isAllMentioned
+          ? 'Đã gửi tin nhắn (Đã tag @Tất cả nhân sự)!'
+          : `Đã gửi tin nhắn (Đã tag ${targetUsersToNotify.map(u => u.name).join(', ')})!`,
+        'success'
+      );
+    } else {
+      showToast('Đã gửi tin nhắn đến Kênh Chat Chung!', 'success');
+    }
+  };
+
+  const toggleChatReaction = (messageId: string, emoji: string, label: string) => {
+    setChatMessages(prev =>
+      prev.map(msg => {
+        if (msg.id !== messageId) return msg;
+
+        const existingIdx = msg.reactions.findIndex(
+          r => r.userId === currentUser.id && r.emoji === emoji
+        );
+
+        let newReactions = [...msg.reactions];
+        if (existingIdx >= 0) {
+          newReactions.splice(existingIdx, 1);
+        } else {
+          const now = new Date();
+          const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          newReactions.push({
+            emoji,
+            label,
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userRole: currentUser.role,
+            userAvatar: currentUser.avatar,
+            timestamp: timeStr
+          });
+        }
+
+        return {
+          ...msg,
+          reactions: newReactions
+        };
+      })
+    );
+  };
+
+  const deleteChatMessage = (messageId: string) => {
+    if (currentUser.role !== 'ADMIN') {
+      showToast('Chỉ Quản trị viên (Admin) mới có quyền xóa tin nhắn!', 'error');
+      return;
+    }
+    setChatMessages(prev => prev.filter(m => m.id !== messageId));
+    showToast('Đã xóa tin nhắn.', 'info');
   };
 
   const pendingScheduleCount = useMemo(() => {
@@ -2102,6 +2644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteStudent,
         importStudentsFromExcel,
         renewStudentMonth,
+        updateStudentSession,
         addSessionsToStudent,
         addClass,
         editClass,
@@ -2112,6 +2655,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markAllNotificationsAsRead,
         searchQuery,
         setSearchQuery,
+        chatMessages,
+        sendChatMessage,
+        toggleChatReaction,
+        deleteChatMessage,
         toasts,
         showToast,
         removeToast,
@@ -2125,7 +2672,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         attendanceTarget,
         setAttendanceTarget,
         dailyCoachAssignments,
+        dailyClassNotes,
+        classCoachStudentAssignments,
+        assignStudentToCoachInClass,
+        batchAssignStudentsToCoachInClass,
         addCoachToDailyClass,
+        updateDailyClassNote,
         removeCoachFromDailyClass,
         assignCoachToDailyClass,
         getDailyClasses,

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Search,
   Bell,
@@ -10,7 +10,8 @@ import {
   Calendar,
   AlertTriangle,
   Flame,
-  Clock
+  Clock,
+  MessageSquare
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { INITIAL_USERS } from '../../data/mockData';
@@ -31,15 +32,40 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
     classes,
     isCoach,
     pendingScheduleCount,
-    adminNotifications
+    adminNotifications,
+    chatMessages
   } = useApp();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const coachReminderNotifs = useMemo(() => {
+    if (currentUser.role !== 'COACH') return [];
+    return notifications.filter(
+      n => n.targetRole === 'COACH' && (!n.targetCoachId || n.targetCoachId === currentUser.coachId)
+    );
+  }, [currentUser, notifications]);
 
-  const totalUnreadCount = notifications.filter(n => !n.read).length + (currentUser.role === 'ADMIN' ? pendingScheduleCount : 0);
+  const visibleNotifications = useMemo(() => {
+    return notifications.filter(n => {
+      if (n.targetUserId && n.targetUserId !== currentUser.id) {
+        return false;
+      }
+      if (currentUser.role === 'COACH') {
+        if (n.targetRole && n.targetRole !== 'COACH') return false;
+        if (n.targetCoachId && n.targetCoachId !== currentUser.coachId) return false;
+      }
+      return true;
+    });
+  }, [currentUser, notifications]);
+
+  const totalUnreadCount = useMemo(() => {
+    if (currentUser.role === 'ADMIN') {
+      return visibleNotifications.filter(n => !n.read).length + pendingScheduleCount;
+    }
+    return visibleNotifications.filter(n => !n.read).length;
+  }, [currentUser, visibleNotifications, pendingScheduleCount]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -103,6 +129,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
           </button>
         )}
 
+        {/* Quick Chat Button */}
+        <button
+          type="button"
+          onClick={() => navigate('chat')}
+          className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+          title="Kênh Chat Chung Toàn Hệ Thống"
+        >
+          <MessageSquare className="w-5 h-5" />
+          {chatMessages.length > 0 && (
+            <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-[10px] font-bold text-white flex items-center justify-center shadow-xs">
+              {chatMessages.length}
+            </span>
+          )}
+        </button>
+
         {/* Notifications Button & Dropdown */}
         <div className="relative" ref={notifRef}>
           <button
@@ -160,11 +201,52 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
                 </div>
               )}
 
+              {/* Pre-session Reminder Alert for Coach */}
+              {currentUser.role === 'COACH' && coachReminderNotifs.length > 0 && (
+                <div className="mb-2.5 p-3 rounded-2xl bg-amber-50 border-2 border-amber-300 shadow-2xs space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between text-xs font-black text-amber-950">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                      Dặn Dò Ca Dạy Từ Ban Quản Lý
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 text-[10px] font-bold">
+                      {coachReminderNotifs.filter(n => !n.read).length} mới
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    {coachReminderNotifs.slice(0, 3).map(notif => (
+                      <div
+                        key={notif.id}
+                        onClick={() => {
+                          markNotificationAsRead(notif.id);
+                          if (notif.linkTo) {
+                            navigate(notif.linkTo.tab, notif.linkTo.id);
+                            setIsNotifOpen(false);
+                          }
+                        }}
+                        className="p-2 bg-white rounded-xl border border-amber-200 hover:bg-amber-100/50 transition-colors cursor-pointer"
+                      >
+                        <div className="text-xs font-extrabold text-amber-950 truncate">
+                          {notif.facilityName ? `${notif.facilityName} - ${notif.shiftName}` : notif.title}
+                        </div>
+                        <p className="text-[11px] text-slate-800 font-semibold mt-0.5 line-clamp-2">
+                          "{notif.noteContent || notif.message}"
+                        </p>
+                        <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400">
+                          <span>{notif.senderName || 'Ban Quản Trị'}</span>
+                          <span className="text-[#10B981] font-bold">Xem ca dạy →</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="max-h-72 overflow-y-auto space-y-2">
-                {notifications.length === 0 ? (
+                {visibleNotifications.length === 0 ? (
                   <p className="py-6 text-center text-xs text-slate-400">Không có thông báo nào</p>
                 ) : (
-                  notifications.map(notif => (
+                  visibleNotifications.map(notif => (
                     <div
                       key={notif.id}
                       onClick={() => {
@@ -181,12 +263,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSearch, onOpenAddStudent }
                       }`}
                     >
                       <div className="mt-0.5 shrink-0">
-                        {notif.type === 'warning' && (
+                        {notif.linkTo?.tab === 'chat' ? (
+                          <MessageSquare className="w-4 h-4 text-emerald-600" />
+                        ) : notif.type === 'warning' ? (
                           <AlertTriangle className="w-4 h-4 text-amber-500" />
-                        )}
-                        {notif.type === 'info' && <Calendar className="w-4 h-4 text-sky-500" />}
-                        {notif.type === 'alert' && <AlertTriangle className="w-4 h-4 text-rose-500" />}
-                        {notif.type === 'success' && (
+                        ) : notif.type === 'info' ? (
+                          <Calendar className="w-4 h-4 text-sky-500" />
+                        ) : notif.type === 'alert' ? (
+                          <AlertTriangle className="w-4 h-4 text-rose-500" />
+                        ) : (
                           <CheckCircle2 className="w-4 h-4 text-[#10B981]" />
                         )}
                       </div>
