@@ -401,13 +401,6 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
               <RotateCw className="w-4 h-4" />
               <span>Gia Hạn Tháng Mới (Bảo Lưu)</span>
             </button>
-            <button
-              onClick={() => setIsAddSessionModalOpen(true)}
-              className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-emerald-600" />
-              <span>Nạp Thêm Buổi</span>
-            </button>
           </div>
         )}
       </div>
@@ -658,7 +651,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
                         <div
                           key={s.date + idx}
                           onClick={() => openEditSessionModal(s, idx)}
-                          className={`group p-2 rounded-xl border text-xs flex flex-col justify-between transition-all cursor-pointer hover:border-emerald-400 hover:shadow-xs hover:-translate-y-0.5 ${
+                          className={`group p-2 rounded-xl border text-xs flex flex-col justify-between transition-colors cursor-pointer hover:border-emerald-500 ${
                             isToday
                               ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/30 shadow-xs'
                               : isPast
@@ -931,20 +924,13 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({ studentId,
 
             {/* Quick Actions */}
             {!isCoach && (
-              <div className="pt-2 flex items-center gap-3">
+              <div className="pt-2">
                 <button
                   onClick={() => setIsRenewModalOpen(true)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
                   <span>Gia hạn tháng mới</span>
-                </button>
-                <button
-                  onClick={() => setIsAddSessionModalOpen(true)}
-                  className="flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-xs transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Nạp thêm buổi</span>
                 </button>
               </div>
             )}

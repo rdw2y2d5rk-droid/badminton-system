@@ -135,7 +135,20 @@ interface AppContextType {
       };
     }>;
   }) => void;
-  addMakeupStudentToSession: (sessionId: string, student: Student, note?: string) => void;
+  addMakeupStudentToSession: (
+    sessionId: string,
+    student: Student,
+    note?: string,
+    sessionMeta?: {
+      date: string;
+      facilityId: string;
+      facilityName: string;
+      shiftId?: string;
+      shiftName?: string;
+      timeSlot?: string;
+    },
+    suppressToast?: boolean
+  ) => void;
   
   // Payment actions
   confirmPayment: (
@@ -1375,7 +1388,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Add make-up student to session
-  const addMakeupStudentToSession = (sessionId: string, student: Student, note: string = 'Học bù tại cơ sở') => {
+  const addMakeupStudentToSession = (
+    sessionId: string,
+    student: Student,
+    note: string = 'Học bù tại cơ sở',
+    sessionMeta?: {
+      date: string;
+      facilityId: string;
+      facilityName: string;
+      shiftId?: string;
+      shiftName?: string;
+      timeSlot?: string;
+    },
+    suppressToast?: boolean
+  ) => {
     const makeupItem: AttendanceRecordItem = {
       studentId: student.id,
       studentName: student.name,
@@ -1387,8 +1413,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       note
     };
 
-    setSessions(prev =>
-      prev.map(s => {
+    setSessions(prev => {
+      const existing = prev.find(s => s.id === sessionId);
+      if (!existing) {
+        const cleanFacName = sessionMeta?.facilityName
+          ? sessionMeta.facilityName.replace('Sân Cầu Lông ', '')
+          : 'Cầu Giấy';
+        const newSession: SessionAttendance = {
+          id: sessionId,
+          classId: student.classId || 'CLASS01',
+          className: student.className || 'Lớp Cầu Lông',
+          facilityId: sessionMeta?.facilityId || 'CS01',
+          date: sessionMeta?.date || new Date().toISOString().split('T')[0],
+          timeSlot: sessionMeta?.timeSlot || '17:30 - 19:00',
+          court: 'Sân 01',
+          coachId: 'HLV001',
+          coachName: 'Huấn luyện viên',
+          coachAttendanceDone: false,
+          totalStudents: 1,
+          makeupStudents: [makeupItem]
+        };
+        return [newSession, ...prev];
+      }
+      return prev.map(s => {
         if (s.id === sessionId) {
           const currentMakeup = s.makeupStudents || [];
           const exists = currentMakeup.some(m => m.studentId === student.id);
@@ -1400,10 +1447,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         }
         return s;
-      })
-    );
+      });
+    });
 
-    showToast(`Đã thêm học viên ${student.name} vào danh sách học bù ca hôm nay!`, 'success');
+    // Đồng bộ sang thông tin lịch học của học viên (scheduledSessions) để tự động cập nhật ở màn Đổi Lịch Học / Đổi Sân & Ca Buổi Tập
+    if (sessionMeta) {
+      setStudents(prevStudents =>
+        prevStudents.map(st => {
+          if (st.id !== student.id) return st;
+
+          const currentSessions = st.scheduledSessions ? [...st.scheduledSessions] : [];
+          const existingIdx = currentSessions.findIndex(s => s.date === sessionMeta.date);
+
+          const cleanFacName = sessionMeta.facilityName
+            ? sessionMeta.facilityName.replace('Sân Cầu Lông ', '')
+            : 'Cầu Giấy';
+
+          const updatedSession: ScheduledSession = {
+            date: sessionMeta.date,
+            facilityId: sessionMeta.facilityId,
+            facilityName: cleanFacName,
+            shiftId: sessionMeta.shiftId || 'CA01',
+            shiftName: sessionMeta.shiftName || 'Ca Sáng 1',
+            timeSlot: sessionMeta.timeSlot || '06:00 - 07:30'
+          };
+
+          if (existingIdx >= 0) {
+            currentSessions[existingIdx] = updatedSession;
+          } else {
+            currentSessions.push(updatedSession);
+          }
+
+          currentSessions.sort((a, b) => a.date.localeCompare(b.date));
+
+          const uniqueFacs = Array.from(new Set(currentSessions.map(s => s.facilityName).filter(Boolean)));
+          let updatedFacilityName = st.facilityName;
+          if (uniqueFacs.length > 1) {
+            updatedFacilityName = `Đa cơ sở (${uniqueFacs.length} cơ sở)`;
+          } else if (uniqueFacs.length === 1) {
+            updatedFacilityName = uniqueFacs[0];
+          }
+
+          const updatedDates = currentSessions.map(s => s.date);
+
+          return {
+            ...st,
+            scheduledSessions: currentSessions,
+            specificDates: updatedDates,
+            facilityName: updatedFacilityName,
+            courtName: updatedFacilityName
+          };
+        })
+      );
+    }
+
+    if (!suppressToast) {
+      showToast(`Đã thêm học viên ${student.name} vào danh sách học bù ca hôm nay!`, 'success');
+    }
   };
 
   // Save Student Attendance with Leave Rules (4 sessions/month = 1 leave)

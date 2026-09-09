@@ -27,6 +27,12 @@ import { AttendanceStatus, CoachAttendanceRecord } from '../types';
 import { Modal } from '../components/common/Modal';
 import { MonthlyAttendanceMatrix } from '../components/attendance/MonthlyAttendanceMatrix';
 
+const formatCleanFacilityName = (name?: string) => {
+  if (!name) return '';
+  const cleaned = name.replace(/^Sân\s+(cầu\s+lông\s+|Cầu\s+Lông\s+)?/i, '').trim();
+  return cleaned || name;
+};
+
 export const AttendanceView: React.FC = () => {
   const {
     classes,
@@ -34,6 +40,7 @@ export const AttendanceView: React.FC = () => {
     facilities,
     coaches,
     sessions,
+    shifts,
     saveAttendance,
     saveCoachAttendance,
     saveUnifiedAttendance,
@@ -80,7 +87,7 @@ export const AttendanceView: React.FC = () => {
   // Make-up Student Modal State
   const [isMakeupModalOpen, setIsMakeupModalOpen] = useState(false);
   const [makeupSearchQuery, setMakeupSearchQuery] = useState('');
-  const [selectedMakeupStudentId, setSelectedMakeupStudentId] = useState('');
+  const [selectedMakeupStudentIds, setSelectedMakeupStudentIds] = useState<string[]>([]);
   const [makeupNote, setMakeupNote] = useState('Học bù ca ngày hôm nay');
 
   // Sync if attendanceTarget changes
@@ -498,23 +505,92 @@ export const AttendanceView: React.FC = () => {
 
   const handleSaveAttendance = handleApproveAllStudentsAndCoaches;
 
+  // Danh sách học viên có thể thêm học bù vào ca này
+  const availableMakeupStudents = useMemo(() => {
+    return students.filter(s => {
+      const isNotInCurrentList = !classStudents.some(cs => cs.id === s.id);
+      const notInMakeup = !sessionMakeupStudents.some(m => m.studentId === s.id);
+      const matches =
+        !makeupSearchQuery ||
+        s.name.toLowerCase().includes(makeupSearchQuery.toLowerCase()) ||
+        s.code.toLowerCase().includes(makeupSearchQuery.toLowerCase()) ||
+        s.phone.includes(makeupSearchQuery);
+      return isNotInCurrentList && notInMakeup && matches;
+    });
+  }, [students, classStudents, sessionMakeupStudents, makeupSearchQuery]);
+
+  const isAllMakeupSelected =
+    availableMakeupStudents.length > 0 &&
+    availableMakeupStudents.every(s => selectedMakeupStudentIds.includes(s.id));
+
+  const handleToggleSelectAllMakeup = () => {
+    if (isAllMakeupSelected) {
+      setSelectedMakeupStudentIds(prev =>
+        prev.filter(id => !availableMakeupStudents.some(s => s.id === id))
+      );
+    } else {
+      setSelectedMakeupStudentIds(prev => {
+        const combined = new Set([...prev, ...availableMakeupStudents.map(s => s.id)]);
+        return Array.from(combined);
+      });
+    }
+  };
+
+  const handleToggleMakeupStudent = (studentId: string) => {
+    setSelectedMakeupStudentIds(prev =>
+      prev.includes(studentId)
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
   const handleAddMakeupConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMakeupStudentId) return;
+    if (selectedMakeupStudentIds.length === 0) return;
 
-    const targetStudent = students.find(s => s.id === selectedMakeupStudentId);
-    if (!targetStudent) return;
+    const targetStudents = students.filter(s => selectedMakeupStudentIds.includes(s.id));
+    if (targetStudents.length === 0) return;
 
     const sessionId = targetSession ? targetSession.id : `sess-${selectedFacilityId}-${selectedDate}`;
-    addMakeupStudentToSession(sessionId, targetStudent, makeupNote);
 
-    setAttendanceMap(prev => ({
-      ...prev,
-      [targetStudent.id]: 'Present'
-    }));
+    // Tìm ca học hiện tại tại cơ sở để đồng bộ thông tin ca và cơ sở
+    const activeShift =
+      (targetSession?.shiftId && shifts?.find(sh => sh.id === targetSession.shiftId)) ||
+      (facilityDailyClasses.length > 0 &&
+        facilityDailyClasses[0].shiftId &&
+        shifts?.find(sh => sh.id === facilityDailyClasses[0].shiftId)) ||
+      shifts?.[0] || { id: 'CA01', name: 'Ca Chiều 1', timeSlot: '17:30 - 19:00' };
+
+    const sessionMeta = {
+      date: selectedDate,
+      facilityId: selectedFacilityId,
+      facilityName: formatCleanFacilityName(currentFacilityName),
+      shiftId: activeShift?.id || 'CA01',
+      shiftName: activeShift?.name || facilityDailyClasses[0]?.shiftName || 'Ca Chiều 1',
+      timeSlot: activeShift?.timeSlot || facilityDailyClasses[0]?.timeSlot || '17:30 - 19:00'
+    };
+
+    targetStudents.forEach(st => {
+      addMakeupStudentToSession(sessionId, st, makeupNote, sessionMeta, targetStudents.length > 1);
+    });
+
+    if (targetStudents.length > 1) {
+      showToast(
+        `Đã thêm ${targetStudents.length} học viên học bù & đồng bộ lịch ca sang ${formatCleanFacilityName(currentFacilityName)} thành công!`,
+        'success'
+      );
+    }
+
+    setAttendanceMap(prev => {
+      const next = { ...prev };
+      targetStudents.forEach(st => {
+        next[st.id] = 'Present';
+      });
+      return next;
+    });
 
     setIsMakeupModalOpen(false);
-    setSelectedMakeupStudentId('');
+    setSelectedMakeupStudentIds([]);
     setMakeupNote('Học bù ca ngày hôm nay');
   };
 
@@ -630,13 +706,13 @@ export const AttendanceView: React.FC = () => {
               >
                 {facilities.map(f => (
                   <option key={f.id} value={f.id}>
-                    {f.name} ({f.code})
+                    {formatCleanFacilityName(f.name)} ({f.code})
                   </option>
                 ))}
               </select>
             ) : (
               <div className="w-full px-4 py-2.5 bg-slate-100/90 text-sm font-bold text-[#0F172A] rounded-xl border border-slate-200 flex items-center justify-between">
-                <span className="truncate">{currentFacilityName}</span>
+                <span className="truncate">{formatCleanFacilityName(currentFacilityName)}</span>
                 <span className="shrink-0 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                   Sân quản lý
                 </span>
@@ -1336,9 +1412,12 @@ export const AttendanceView: React.FC = () => {
       {/* Make-up Student Selection Modal */}
       <Modal
         isOpen={isMakeupModalOpen}
-        onClose={() => setIsMakeupModalOpen(false)}
+        onClose={() => {
+          setIsMakeupModalOpen(false);
+          setSelectedMakeupStudentIds([]);
+        }}
         title="Thêm Học Viên Học Bù Vào Ca Tập"
-        subtitle={`Điểm danh ngày ${selectedDate} • ${currentFacilityName}`}
+        subtitle={`Điểm danh ngày ${selectedDate} • ${formatCleanFacilityName(currentFacilityName)}`}
       >
         <form onSubmit={handleAddMakeupConfirm} className="space-y-4">
           <div className="relative">
@@ -1353,54 +1432,74 @@ export const AttendanceView: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Chọn học viên muốn học bù *
-            </label>
-            <div className="max-h-48 overflow-y-auto no-scrollbar border border-slate-200 rounded-xl divide-y divide-slate-100">
-              {students
-                .filter(s => {
-                  const isNotInCurrentList = !classStudents.some(cs => cs.id === s.id);
-                  const notInMakeup = !sessionMakeupStudents.some(m => m.studentId === s.id);
-                  const matches =
-                    s.name.toLowerCase().includes(makeupSearchQuery.toLowerCase()) ||
-                    s.code.toLowerCase().includes(makeupSearchQuery.toLowerCase()) ||
-                    s.phone.includes(makeupSearchQuery);
-                  return isNotInCurrentList && notInMakeup && matches;
-                })
-                .slice(0, 15)
-                .map(st => {
-                  const isSelected = selectedMakeupStudentId === st.id;
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700">
+                Chọn học viên muốn học bù {selectedMakeupStudentIds.length > 0 && `(${selectedMakeupStudentIds.length} đã chọn)`} *
+              </label>
+              {availableMakeupStudents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAllMakeup}
+                  className="text-[11px] font-bold text-amber-600 hover:text-amber-700 cursor-pointer"
+                >
+                  {isAllMakeupSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                </button>
+              )}
+            </div>
+
+            <div className="max-h-56 overflow-y-auto no-scrollbar border border-slate-200 rounded-xl divide-y divide-slate-100">
+              {availableMakeupStudents.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-400">
+                  Không tìm thấy học viên phù hợp
+                </div>
+              ) : (
+                availableMakeupStudents.map(st => {
+                  const isSelected = selectedMakeupStudentIds.includes(st.id);
+                  const isFromOtherFacility = st.facilityId && st.facilityId !== selectedFacilityId;
                   return (
                     <div
                       key={st.id}
-                      onClick={() => setSelectedMakeupStudentId(st.id)}
+                      onClick={() => handleToggleMakeupStudent(st.id)}
                       className={`p-2.5 flex items-center justify-between cursor-pointer transition-colors ${
-                        isSelected ? 'bg-amber-50 text-amber-950 font-bold' : 'hover:bg-slate-50'
+                        isSelected ? 'bg-amber-50/90 text-amber-950 font-medium' : 'hover:bg-slate-50'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
                         <img
                           src={st.avatar}
                           alt={st.name}
-                          className="w-8 h-8 rounded-lg object-cover"
+                          className="w-8 h-8 rounded-lg object-cover shrink-0"
                         />
-                        <div>
-                          <div className="text-xs font-bold text-[#0F172A]">{st.name}</div>
-                          <div className="text-[10px] text-slate-500">
-                            {st.code} • Lớp gốc: {st.className} • Còn {st.remainingSessions} buổi
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-[#0F172A] truncate flex items-center gap-1.5">
+                            <span>{st.name}</span>
+                            {isFromOtherFacility && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 border border-purple-200 shrink-0">
+                                Sang từ: {formatCleanFacilityName(st.facilityName || 'Cầu Giấy')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                            <span>{st.code}</span>
+                            <span>•</span>
+                            <span>Lớp: {st.className}</span>
+                            <span>•</span>
+                            <span>Còn {st.remainingSessions} buổi</span>
                           </div>
                         </div>
                       </div>
                       <input
-                        type="radio"
+                        type="checkbox"
                         name="selectedMakeup"
                         checked={isSelected}
-                        onChange={() => setSelectedMakeupStudentId(st.id)}
-                        className="text-amber-500"
+                        onChange={() => handleToggleMakeupStudent(st.id)}
+                        onClick={e => e.stopPropagation()}
+                        className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300 cursor-pointer shrink-0"
                       />
                     </div>
                   );
-                })}
+                })
+              )}
             </div>
           </div>
 
@@ -1417,21 +1516,35 @@ export const AttendanceView: React.FC = () => {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setIsMakeupModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={!selectedMakeupStudentId}
-              className="px-5 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              Thêm Vào Ca Học Này
-            </button>
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+            <span className="text-xs text-slate-500">
+              {selectedMakeupStudentIds.length > 0 ? (
+                <span className="font-semibold text-amber-700">
+                  Đã chọn {selectedMakeupStudentIds.length} học viên
+                </span>
+              ) : (
+                'Chưa chọn học viên'
+              )}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMakeupModalOpen(false);
+                  setSelectedMakeupStudentIds([]);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={selectedMakeupStudentIds.length === 0}
+                className="px-5 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                Thêm {selectedMakeupStudentIds.length > 0 ? `(${selectedMakeupStudentIds.length}) ` : ''}Học Viên Vào Ca Này
+              </button>
+            </div>
           </div>
         </form>
       </Modal>
